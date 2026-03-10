@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Judgement — Multiplayer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:   #1a6b3a;
+      --green2:  #155730;
+      --panel:   rgba(0,0,0,0.30);
+      --panel2:  rgba(0,0,0,0.18);
+      --yellow:  #f9d84b;
+      --blue:    #3a7abf;
+      --red:     #c0392b;
+      --radius:  10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--green);
+      color: #fff;
+      min-height: 100vh;
+      padding: 14px;
+    }
+
+    h1 { text-align: center; font-size: 1.6rem; letter-spacing: 3px; margin-bottom: 6px; }
+    h2 { font-size: 1.15rem; margin-bottom: 10px; }
+    h3 { font-size: 0.95rem; margin-bottom: 6px; }
+
+    input, textarea, select {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 2px solid transparent;
+      font-size: 0.95rem;
+      outline: none;
+      width: 100%;
+      background: rgba(255,255,255,0.92);
+      color: #222;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: var(--yellow); }
+
+    button {
+      padding: 9px 20px;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    button:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-primary  { background: var(--yellow); color: #222; }
+    .btn-blue     { background: var(--blue); color: #fff; }
+    .btn-red      { background: var(--red); color: #fff; }
+
+    .panel { background: var(--panel); border-radius: var(--radius); padding: 18px 20px; }
+    .gap  { margin-bottom: 10px; }
+    .gap2 { margin-bottom: 6px; }
+    .label { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-bottom: 3px; }
+    .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.12);
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 0.75rem;
+    }
+    .badge.yellow { background: var(--yellow); color: #222; }
+    .badge.blue   { background: var(--blue); }
+    .badge.green  { background: #27ae60; }
+
+    /* ── SCREEN SWITCHER ──────────────────────────────────────────── */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HOME SCREEN
+    ═══════════════════════════════════════════════════════════════ */
+    #s-home { max-width: 480px; margin: 40px auto; }
+    .divider {
+      display: flex; align-items: center; gap: 10px;
+      margin: 20px 0; color: rgba(255,255,255,0.4); font-size: 0.85rem;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.15);
+    }
+    #home-error {
+      color: #ff8080; font-size: 0.85rem; min-height: 20px; text-align: center;
+      margin-top: 6px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LOBBY SCREEN
+    ═══════════════════════════════════════════════════════════════ */
+    #s-lobby { max-width: 540px; margin: 30px auto; }
+
+    .join-url-box {
+      background: rgba(255,255,255,0.08);
+      border: 1px dashed rgba(255,255,255,0.3);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      flex-wrap: wrap;
+    }
+    .join-url-box .url { font-family: monospace; font-size: 0.95rem; color: var(--yellow); }
+    .copy-btn { padding: 5px 12px; font-size: 0.78rem; background: var(--panel); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+
+    .player-slots {
+      display: flex; flex-direction: column; gap: 8px; margin: 14px 0;
+    }
+    .player-slot {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--panel2); border-radius: 7px; padding: 9px 14px;
+      border-left: 3px solid rgba(255,255,255,0.15);
+      transition: border-color 0.2s;
+    }
+    .player-slot.filled       { border-left-color: #27ae60; }
+    .player-slot.filled-bot   { border-left-color: #8e44ad; }
+    .player-slot.empty        { opacity: 0.5; }
+    .player-slot .slot-actions { margin-left: auto; display: flex; gap: 6px; }
+    .slot-btn { padding: 3px 10px; font-size: 0.74rem; border-radius: 5px; border: none; cursor: pointer; font-weight: bold; }
+    .slot-btn.add  { background: #8e44ad; color: #fff; }
+    .slot-btn.rem  { background: var(--red); color: #fff; opacity: 0.85; }
+    .player-slot .slot-name { font-size: 0.95rem; }
+    .slot-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+    }
+    .slot-dot.online { background: #2ecc71; }
+
+    #lobby-countdown {
+      text-align: center; font-size: 0.85rem; color: rgba(255,255,255,0.55);
+      margin-top: 6px; min-height: 18px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       GAME SCREEN
+    ═══════════════════════════════════════════════════════════════ */
+    #s-game { max-width: 1000px; margin: 0 auto; }
+
+    /* Status bar */
+    #g-status {
+      display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+      background: var(--panel); border-radius: 8px; padding: 7px 12px;
+      margin-bottom: 10px; font-size: 0.8rem;
+    }
+    #g-status .chip {
+      background: rgba(255,255,255,0.1); border-radius: 4px; padding: 3px 9px;
+    }
+    #g-status .chip.highlight { background: var(--yellow); color: #222; font-weight: bold; }
+
+    /* Message bar */
+    #g-message {
+      text-align: center; min-height: 22px; font-size: 0.9rem;
+      color: var(--yellow); margin-bottom: 8px; font-weight: 500;
+    }
+
+    /* Opponents row */
+    #g-opponents {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-bottom: 10px; justify-content: center;
+    }
+    .opponent-card {
+      background: var(--panel); border-radius: 9px; padding: 10px 14px;
+      min-width: 130px; border: 2px solid transparent; transition: border-color 0.2s;
+      text-align: center;
+    }
+    .opponent-card.active { border-color: var(--yellow); }
+    .opponent-card .opp-name { font-weight: bold; font-size: 0.9rem; margin-bottom: 6px; }
+    .opponent-card .opp-badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 8px; }
+    .card-backs { display: flex; gap: 3px; justify-content: center; flex-wrap: wrap; }
+    .card-back {
+      width: 24px; height: 34px; border-radius: 3px;
+      background: repeating-linear-gradient(
+        45deg, #1a3a8f, #1a3a8f 3px, #1e44a8 3px, #1e44a8 6px
+      );
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    /* Trick area */
+    #g-trick-area {
+      background: var(--panel); border-radius: var(--radius);
+      padding: 14px; margin-bottom: 10px;
+      min-height: 130px;
+      display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; align-items: center;
+    }
+    #g-trick-area .empty-label {
+      color: rgba(255,255,255,0.25); font-size: 0.85rem;
+    }
+    .trick-slot { text-align: center; }
+    .trick-slot .t-name { font-size: 0.7rem; color: #ccc; margin-top: 4px; }
+
+    /* Prediction panel */
+    #g-prediction {
+      background: var(--panel); border-radius: var(--radius);
+      padding: 14px 16px; margin-bottom: 10px; display: none;
+    }
+    #g-prediction .pred-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+    #g-prediction input[type=number] { width: 70px; text-align: center; }
+    #pred-forbidden { font-size: 0.8rem; color: #ff9f9f; }
+
+    /* My hand */
+    #g-hand-area {
+      background: var(--panel); border-radius: var(--radius);
+      padding: 14px; margin-bottom: 10px;
+    }
+    #g-hand-area h3 { margin-bottom: 10px; color: var(--yellow); }
+    #g-hand {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .hand-card { position: relative; }
+    .hand-card img {
+      width: 72px; height: 104px; border-radius: 6px;
+      background: #fff; object-fit: contain;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+      cursor: not-allowed; opacity: 0.55;
+    }
+    .hand-card img.playable {
+      cursor: pointer; opacity: 1;
+    }
+    .hand-card img.playable:hover {
+      transform: translateY(-10px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    }
+
+    /* Round end overlay */
+    #g-round-end {
+      display: none; background: var(--panel); border-radius: var(--radius);
+      padding: 18px; margin-bottom: 10px; text-align: center;
+    }
+    #g-round-end table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.88rem; }
+    #g-round-end th { color: var(--yellow); padding: 4px 8px; }
+    #g-round-end td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    #re-waiting { font-size: 0.82rem; color: rgba(255,255,255,0.5); margin-top: 8px; min-height: 18px; }
+    #re-chart { display: block; border-radius: 6px; margin-top: 16px; }
+
+    /* Start next round button — fixed top-right, host only */
+    #btn-next-round {
+      display: none; position: fixed; top: 14px; right: 14px; z-index: 200;
+      background: var(--yellow); color: #222; font-weight: bold;
+      padding: 9px 18px; border-radius: 8px; font-size: 0.9rem;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+    }
+
+    /* Game over */
+    #g-game-over {
+      display: none; text-align: center; background: var(--panel);
+      border-radius: var(--radius); padding: 28px; margin-bottom: 10px;
+    }
+    #g-game-over h2 { font-size: 1.6rem; margin-bottom: 10px; }
+    #g-game-over table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
+    #g-game-over th { color: var(--yellow); padding: 5px 10px; }
+    #g-game-over td { padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+
+    /* Card images in trick area */
+    .trick-img {
+      width: 62px; height: 90px; border-radius: 5px;
+      background: #fff; object-fit: contain; display: block;
+    }
+
+    /* Disconnected overlay */
+    #g-disconnected {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.75); z-index: 999;
+      align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+    }
+    #g-disconnected.show { display: flex; }
+    #g-disconnected p { font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+
+<h1>&#9824; Judgement &#9830;</h1>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HOME SCREEN
+════════════════════════════════════════════════════════════ -->
+<div id="s-home" class="screen active">
+  <!-- Host section -->
+  <div class="panel gap" id="host-section">
+    <h2>&#127968; Host a Game</h2>
+    <div class="gap2">
+      <div class="label">Your name</div>
+      <input id="host-name" type="text" placeholder="Enter your name" maxlength="20" />
+    </div>
+    <div class="gap">
+      <div class="label">Total player slots (humans + bots) <span id="player-count-display" style="color:var(--yellow)">4</span></div>
+      <input id="player-count" type="range" min="2" max="10" value="4"
+        oninput="document.getElementById('player-count-display').textContent=this.value"
+        style="width:100%;accent-color:var(--yellow);margin-top:4px;background:transparent;cursor:pointer" />
+      <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:rgba(255,255,255,0.4);margin-top:2px">
+        <span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="doHost()" style="width:100%">Host Game</button>
+  </div>
+
+  <div class="divider">OR</div>
+
+  <!-- Join section -->
+  <div class="panel" id="join-section">
+    <h2>&#128101; Join a Game</h2>
+    <div class="gap">
+      <div class="label">Your name</div>
+      <input id="join-name" type="text" placeholder="Enter your name" maxlength="20" />
+    </div>
+    <button class="btn-blue" onclick="doJoin()" style="width:100%">Join Game</button>
+  </div>
+
+  <div id="home-error"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LOBBY SCREEN
+════════════════════════════════════════════════════════════ -->
+<div id="s-lobby" class="screen">
+  <div class="panel">
+    <h2>&#9201; Waiting Room</h2>
+
+    <div id="share-box" style="display:none; margin-bottom:14px;">
+      <div class="label" style="margin-bottom:6px">Share this link with other players on your network:</div>
+      <div class="join-url-box">
+        <span class="url" id="lobby-url"></span>
+        <button class="copy-btn btn-blue" onclick="copyUrl()">Copy</button>
+      </div>
+    </div>
+
+    <div class="label" style="margin-bottom:6px">
+      Players (<span id="lobby-count">0</span> / <span id="lobby-max">?</span>)
+    </div>
+    <div class="player-slots" id="lobby-slots"></div>
+
+    <div id="lobby-countdown"></div>
+
+    <div style="margin-top:14px; text-align:center">
+      <button id="start-btn" class="btn-primary" onclick="doStartGame()" disabled style="min-width:160px">
+        Start Game
+      </button>
+      <div id="start-hint" style="font-size:0.78rem;color:rgba(255,255,255,0.45);margin-top:6px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Fixed "Start Next Round" button — shown to host during round_end -->
+<button id="btn-next-round" onclick="doStartNextRound()">&#9654; Start Next Round</button>
+
+<!-- ═══════════════════════════════════════════════════════════
+     GAME SCREEN
+════════════════════════════════════════════════════════════ -->
+<div id="s-game" class="screen">
+  <!-- Status bar -->
+  <div id="g-status">
+    <span class="chip" id="gs-round">Round —</span>
+    <span class="chip" id="gs-trump">Trump —</span>
+    <span class="chip" id="gs-cards">Cards —</span>
+    <span class="chip" id="gs-phase">—</span>
+    <span class="chip highlight" id="gs-turn">—</span>
+  </div>
+
+  <!-- Message -->
+  <div id="g-message"></div>
+
+  <!-- Opponents -->
+  <div id="g-opponents"></div>
+
+  <!-- Trick area -->
+  <div id="g-trick-area">
+    <span class="empty-label">— play area —</span>
+  </div>
+
+  <!-- Prediction input -->
+  <div id="g-prediction">
+    <h3 id="pred-title">Make your prediction</h3>
+    <div class="pred-row">
+      <input type="number" id="pred-input" min="0" value="0" />
+      <button class="btn-blue" onclick="doPredict()">Predict</button>
+      <span id="pred-forbidden"></span>
+    </div>
+  </div>
+
+  <!-- My hand -->
+  <div id="g-hand-area">
+    <div id="g-my-status" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div id="g-hand"></div>
+  </div>
+
+  <!-- Round end summary -->
+  <div id="g-round-end">
+    <h2>&#127941; Round Complete!</h2>
+    <table>
+      <thead><tr><th>Player</th><th>Predicted</th><th>Won</th><th>Result</th><th>Round Score</th><th>Total</th></tr></thead>
+      <tbody id="re-tbody"></tbody>
+    </table>
+    <div id="re-waiting"></div>
+    <canvas id="re-chart"></canvas>
+  </div>
+
+  <!-- Game over -->
+  <div id="g-game-over">
+    <h2>&#127942; Game Over!</h2>
+    <p id="go-winners" style="font-size:1.1rem;color:var(--yellow);margin-bottom:10px"></p>
+    <table>
+      <thead><tr><th>Player</th><th>Final Score</th></tr></thead>
+      <tbody id="go-tbody"></tbody>
+    </table>
+    <div style="margin-top:18px">
+      <button class="btn-primary" onclick="location.reload()">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<!-- Disconnected overlay -->
+<div id="g-disconnected">
+  <p id="dc-msg">A player disconnected.</p>
+  <button class="btn-primary" onclick="location.reload()">Return to Home</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════════════ -->
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let ws = null;
+let myPlayerId = null;
+let amHost = false;
+let gameState = null;     // latest game state from server
+let roundEndPrevScores = {};  // scores before round end (to compute round delta)
+let countdownInterval = null;
+
+// ─── WebSocket ────────────────────────────────────────────────────────────────
+function connect() {
+  const url = `ws://${window.location.host}`;
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {};
+
+  ws.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    handleMessage(msg);
+  };
+
+  ws.onclose = () => {
+    if (document.getElementById('s-game').classList.contains('active')) {
+      document.getElementById('g-disconnected').classList.add('show');
+      document.getElementById('dc-msg').textContent = 'Connection to the server was lost.';
+    }
+  };
+}
+
+function send(msg) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+
+// ─── Message handler ──────────────────────────────────────────────────────────
+function handleMessage(msg) {
+  switch (msg.type) {
+
+    case 'room_status':
+      handleRoomStatus(msg);
+      break;
+
+    case 'error':
+      showHomeError(msg.message);
+      showGameMessage(msg.message, true);
+      break;
+
+    case 'joined':
+      myPlayerId = msg.playerId;
+      amHost = msg.isHost;
+      showScreen('s-lobby');
+      break;
+
+    case 'lobby_update':
+      renderLobby(msg);
+      break;
+
+    case 'game_started':
+      showScreen('s-game');
+      break;
+
+    case 'game_state':
+      gameState = msg.state;
+      renderGame(msg.state);
+      break;
+
+    case 'player_disconnected':
+      document.getElementById('g-disconnected').classList.add('show');
+      document.getElementById('dc-msg').textContent =
+        `${msg.playerName} disconnected. The game cannot continue.`;
+      break;
+  }
+}
+
+// ─── Room status (shown on home screen) ───────────────────────────────────────
+function handleRoomStatus(msg) {
+  const hostSec = document.getElementById('host-section');
+  const joinSec = document.getElementById('join-section');
+  const hint    = document.getElementById('home-error');
+
+  if (msg.status === 'no_room') {
+    hostSec.style.display = 'block';
+    joinSec.style.display = 'none';
+    hint.textContent = '';
+  } else if (msg.status === 'open') {
+    hostSec.style.display = 'none';
+    joinSec.style.display = 'block';
+    hint.textContent = `Game lobby open — ${msg.currentCount}/${msg.maxPlayers} players joined.`;
+    hint.style.color = 'rgba(255,255,255,0.6)';
+  } else if (msg.status === 'full') {
+    hostSec.style.display = 'none';
+    joinSec.style.display = 'none';
+    hint.textContent = 'The room is full. Please try again later.';
+    hint.style.color = '#ff9f9f';
+  } else if (msg.status === 'in_progress') {
+    hostSec.style.display = 'none';
+    joinSec.style.display = 'none';
+    hint.textContent = 'A game is already in progress on this server.';
+    hint.style.color = '#ff9f9f';
+  }
+}
+
+// ─── Actions: home ────────────────────────────────────────────────────────────
+function doHost() {
+  const name = document.getElementById('host-name').value.trim();
+  const maxPlayers = parseInt(document.getElementById('player-count').value);
+  if (!name) { showHomeError('Please enter your name.'); return; }
+  send({ type: 'host', name, maxPlayers });
+}
+
+function doJoin() {
+  const name = document.getElementById('join-name').value.trim();
+  if (!name) { showHomeError('Please enter your name.'); return; }
+  send({ type: 'join', name });
+}
+
+function showHomeError(msg) {
+  const el = document.getElementById('home-error');
+  if (el) { el.textContent = msg; el.style.color = '#ff8080'; }
+}
+
+// ─── Lobby rendering ──────────────────────────────────────────────────────────
+function renderLobby(msg) {
+  document.getElementById('lobby-count').textContent = msg.currentCount;
+  document.getElementById('lobby-max').textContent   = msg.maxPlayers;
+
+  // Share URL (only show to host)
+  if (msg.isHost) {
+    document.getElementById('share-box').style.display = 'block';
+    document.getElementById('lobby-url').textContent   = msg.joinUrl;
+  }
+
+  // Player slots
+  const container = document.getElementById('lobby-slots');
+  container.innerHTML = '';
+
+  // Filled slots (humans and bots)
+  msg.players.forEach(p => {
+    const slot = document.createElement('div');
+    slot.className = 'player-slot ' + (p.isBot ? 'filled-bot' : 'filled');
+
+    const dot = p.isBot
+      ? '<span style="font-size:1rem">🤖</span>'
+      : '<div class="slot-dot online"></div>';
+
+    const badges = [
+      p.isHost ? '<span class="badge yellow">Host</span>' : '',
+      p.isBot  ? '<span class="badge" style="background:#8e44ad">Bot</span>' : '',
+    ].join('');
+
+    const actions = msg.isHost && p.isBot
+      ? `<div class="slot-actions"><button class="slot-btn rem" onclick="doRemoveBot('${p.id}')">Remove</button></div>`
+      : '';
+
+    slot.innerHTML = `${dot}<span class="slot-name">${esc(p.name)}</span>${badges}${actions}`;
+    container.appendChild(slot);
+  });
+
+  // Empty slots
+  const emptyCount = msg.maxPlayers - msg.players.length;
+  for (let i = 0; i < emptyCount; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'player-slot empty';
+    const addBtn = msg.isHost
+      ? `<div class="slot-actions"><button class="slot-btn add" onclick="doAddBot()">+ Add Bot</button></div>`
+      : '';
+    slot.innerHTML = `<div class="slot-dot"></div><span class="slot-name" style="color:rgba(255,255,255,0.35)">Waiting for player…</span>${addBtn}`;
+    container.appendChild(slot);
+  }
+
+  // Start button (host only)
+  const startBtn = document.getElementById('start-btn');
+  const hint     = document.getElementById('start-hint');
+  startBtn.style.display = msg.isHost ? 'inline-block' : 'none';
+  startBtn.disabled = !msg.canStart;
+  if (msg.isHost && !msg.canStart) {
+    const needed = msg.maxPlayers - msg.currentCount;
+    hint.textContent = `${needed} slot(s) still open — add bot(s) or wait for players to join`;
+  } else if (msg.isHost && msg.canStart) {
+    hint.textContent = 'All slots filled — ready to start!';
+  } else {
+    hint.textContent = '';
+  }
+}
+
+function doAddBot() {
+  send({ type: 'add_bot' });
+}
+
+function doRemoveBot(botId) {
+  send({ type: 'remove_bot', botId });
+}
+
+function copyUrl() {
+  const url = document.getElementById('lobby-url').textContent;
+  navigator.clipboard.writeText(url).catch(() => {});
+  const btn = document.querySelector('.copy-btn');
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+}
+
+function doStartGame() {
+  send({ type: 'start_game' });
+}
+
+// ─── Game rendering ───────────────────────────────────────────────────────────
+function renderGame(gs) {
+  // Hide all sub-panels first, then show relevant ones
+  document.getElementById('g-prediction').style.display  = 'none';
+  document.getElementById('g-round-end').style.display   = 'none';
+  document.getElementById('g-game-over').style.display   = 'none';
+  document.getElementById('g-hand-area').style.display   = 'block';
+
+  // Show "Start Next Round" button only to the host during round_end (not on last round)
+  const nextRoundBtn = document.getElementById('btn-next-round');
+  nextRoundBtn.style.display = (amHost && gs.phase === 'round_end') ? 'block' : 'none';
+
+  renderStatusBar(gs);
+  renderOpponents(gs);
+  renderTrickArea(gs);
+  renderHand(gs);
+  renderMessage(gs);
+
+  if (gs.phase === 'prediction') {
+    renderPrediction(gs);
+  } else if (gs.phase === 'round_end') {
+    renderRoundEnd(gs);
+    document.getElementById('g-hand-area').style.display = 'none';
+  } else if (gs.phase === 'game_over') {
+    renderGameOver(gs);
+    document.getElementById('g-hand-area').style.display = 'none';
+  }
+}
+
+function renderStatusBar(gs) {
+  const isMyTurn = gs.currentPlayerId === myPlayerId;
+  const currentName = gs.players.find(p => p.id === gs.currentPlayerId)?.name ?? '?';
+
+  document.getElementById('gs-round').textContent = `Round ${gs.roundNumber}/${gs.totalRounds}`;
+  document.getElementById('gs-trump').textContent = `Trump: ${trumpLabel(gs.trumpSuit)}`;
+  document.getElementById('gs-cards').textContent = `Cards: ${gs.cardsPerPlayer}`;
+
+  const phaseLabel = {
+    prediction: 'Predicting', playing: 'Playing',
+    round_end: 'Round Over', game_over: 'Game Over',
+  }[gs.phase] || gs.phase;
+  document.getElementById('gs-phase').textContent = phaseLabel;
+
+  const turnEl = document.getElementById('gs-turn');
+  turnEl.textContent = isMyTurn ? 'YOUR TURN' : `${currentName}'s turn`;
+  turnEl.classList.toggle('highlight', isMyTurn);
+}
+
+function renderOpponents(gs) {
+  const me = gs.players.find(p => p.id === myPlayerId);
+  const opponents = gs.players.filter(p => p.id !== myPlayerId);
+  const container = document.getElementById('g-opponents');
+  container.innerHTML = '';
+
+  opponents.forEach(p => {
+    const isActive = p.id === gs.currentPlayerId;
+    const div = document.createElement('div');
+    div.className = 'opponent-card' + (isActive ? ' active' : '');
+
+    // Card backs
+    const backs = Array.from({ length: p.handSize }, () =>
+      `<div class="card-back"></div>`
+    ).join('');
+
+    const nameLabel = (p.isBot ? '🤖 ' : '') + esc(p.name) + (p.isHost ? ' ★' : '');
+    div.innerHTML = `
+      <div class="opp-name">${nameLabel}</div>
+      <div class="opp-badges">
+        <span class="badge blue">${p.score} pts</span>
+        ${p.predictedTricks !== null ? `<span class="badge green">Pred: ${p.predictedTricks}</span>` : ''}
+        <span class="badge">Won: ${p.tricksWon}</span>
+      </div>
+      <div class="card-backs">${backs}</div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function renderTrickArea(gs) {
+  const area = document.getElementById('g-trick-area');
+  area.innerHTML = '';
+
+  if (gs.trickCards.length === 0) {
+    // Show last trick winner briefly
+    if (gs.lastTrickWinnerName) {
+      area.innerHTML = `<span style="color:rgba(255,255,255,0.5);font-size:0.85rem">&#9654; Last trick won by <strong>${esc(gs.lastTrickWinnerName)}</strong></span>`;
+    } else {
+      area.innerHTML = '<span class="empty-label">— play area —</span>';
+    }
+    return;
+  }
+
+  gs.trickCards.forEach(tc => {
+    const isMe = tc.playerId === myPlayerId;
+    const slot = document.createElement('div');
+    slot.className = 'trick-slot';
+    const img = document.createElement('img');
+    img.className = 'trick-img';
+    img.src = `/assets/cards/${tc.card.id}.svg`;
+    img.alt = tc.card.id.replace(/_/g, ' ');
+    img.onerror = () => { img.style.background = '#fff'; };
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 't-name';
+    nameDiv.textContent = isMe ? 'You' : esc(tc.playerName);
+    slot.appendChild(img);
+    slot.appendChild(nameDiv);
+    area.appendChild(slot);
+  });
+}
+
+function renderHand(gs) {
+  const hand = document.getElementById('g-hand');
+  hand.innerHTML = '';
+  const myPlayer = gs.players.find(p => p.id === myPlayerId);
+  const isMyTurn  = gs.currentPlayerId === myPlayerId;
+
+  // ── My status bar (persistent prediction + score during play) ────────────
+  const myStatus = document.getElementById('g-my-status');
+  if (myStatus && myPlayer) {
+    const predBadge = myPlayer.predictedTricks !== null
+      ? `<span class="badge green">Predicted: ${myPlayer.predictedTricks}</span>`
+      : `<span class="badge" style="color:rgba(255,255,255,0.45)">Not predicted yet</span>`;
+    myStatus.innerHTML = `
+      <h3 style="margin:0;color:var(--yellow)">Your Hand</h3>
+      <span class="badge blue">${myPlayer.score} pts</span>
+      ${predBadge}
+      <span class="badge">Tricks won: ${myPlayer.tricksWon}</span>
+    `;
+  }
+
+  if (!gs.yourHand || gs.yourHand.length === 0) {
+    hand.innerHTML = '<span style="color:rgba(255,255,255,0.35);font-size:0.85rem">No cards in hand</span>';
+    return;
+  }
+
+  gs.yourHand.forEach(card => {
+    const canPlay = gs.phase === 'playing' && isMyTurn &&
+      clientCanPlayCard(card, gs.yourHand, gs.leadSuit, gs.trumpSuit);
+
+    const div = document.createElement('div');
+    div.className = 'hand-card';
+    const img = document.createElement('img');
+    img.src = `/assets/cards/${card.id}.svg`;
+    img.alt = card.id.replace(/_/g, ' ');
+    img.title = card.id.replace(/_/g, ' ');
+    img.className = canPlay ? 'playable' : '';
+    img.onerror = () => { img.style.background = '#fff'; };
+    if (canPlay) img.onclick = () => doPlayCard(card.id);
+    div.appendChild(img);
+    hand.appendChild(div);
+  });
+}
+
+function renderPrediction(gs) {
+  if (gs.currentPlayerId !== myPlayerId) return;
+
+  const panel = document.getElementById('g-prediction');
+  panel.style.display = 'block';
+  document.getElementById('pred-title').textContent =
+    `Your prediction — choose 0 to ${gs.cardsPerPlayer}`;
+  document.getElementById('pred-input').max   = gs.cardsPerPlayer;
+  document.getElementById('pred-input').value = 0;
+
+  // Compute forbidden value for last player
+  const predicted = gs.players.filter(p => p.predictedTricks !== null);
+  const isLast = predicted.length === gs.players.length - 1;
+  const forbidEl = document.getElementById('pred-forbidden');
+  if (isLast) {
+    const sum = predicted.reduce((a, p) => a + p.predictedTricks, 0);
+    const forbidden = gs.cardsPerPlayer - sum;
+    if (forbidden >= 0 && forbidden <= gs.cardsPerPlayer) {
+      forbidEl.textContent = `Cannot predict: ${forbidden}`;
+    } else {
+      forbidEl.textContent = '';
+    }
+  } else {
+    forbidEl.textContent = '';
+  }
+}
+
+function renderMessage(gs) {
+  const el = document.getElementById('g-message');
+  const currentP = gs.players.find(p => p.id === gs.currentPlayerId);
+  const currentIsBot = currentP?.isBot ?? false;
+
+  // ── Trick-complete preview: all cards played, show winner banner ──────────
+  const trickComplete = gs.trickCards.length > 0 && gs.trickCards.length === gs.players.length;
+  if (trickComplete && gs.lastTrickWinnerId) {
+    const winnerName = gs.players.find(p => p.id === gs.lastTrickWinnerId)?.name ?? '?';
+    const isMe = gs.lastTrickWinnerId === myPlayerId;
+    el.textContent = isMe ? `✓ You win this trick!` : `✓ ${winnerName} wins this trick!`;
+    el.style.color = isMe ? '#2ecc71' : 'var(--yellow)';
+    return;
+  }
+  el.style.color = 'var(--yellow)'; // reset colour
+
+  if (gs.phase === 'prediction') {
+    if (gs.currentPlayerId === myPlayerId) {
+      el.textContent = 'Make your prediction';
+    } else if (currentIsBot) {
+      el.textContent = `🤖 ${currentP.name} is thinking…`;
+    } else {
+      el.textContent = `Waiting for ${currentP?.name ?? '?'} to predict…`;
+    }
+  } else if (gs.phase === 'playing') {
+    if (gs.trickCards.length === 0 && gs.lastTrickWinnerName) {
+      el.textContent = `${gs.lastTrickWinnerName} won the last trick`;
+    } else if (gs.currentPlayerId === myPlayerId) {
+      el.textContent = 'Your turn — click a card to play';
+    } else if (currentIsBot) {
+      el.textContent = `🤖 ${currentP.name} is thinking…`;
+    } else {
+      el.textContent = `Waiting for ${currentP?.name ?? '?'} to play…`;
+    }
+  } else {
+    el.textContent = '';
+  }
+}
+
+function renderRoundEnd(gs) {
+  const panel = document.getElementById('g-round-end');
+  panel.style.display = 'block';
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+
+  const tbody = document.getElementById('re-tbody');
+  tbody.innerHTML = '';
+  gs.players.forEach(p => {
+    const pred = p.predictedTricks ?? 0;
+    const won  = pred === p.tricksWon;
+    const roundScore = won ? 11 * pred + 10 : -11 * pred - 1;
+    const tr = document.createElement('tr');
+    const isMe = p.id === myPlayerId;
+    tr.style.fontWeight = isMe ? 'bold' : 'normal';
+    tr.innerHTML = `
+      <td>${esc(p.name)}${isMe ? ' (you)' : ''}</td>
+      <td>${pred}</td>
+      <td>${p.tricksWon}</td>
+      <td style="color:${won ? '#2ecc71' : '#e74c3c'};font-weight:bold">${won ? '✓ Win' : '✗ Loss'}</td>
+      <td style="color:${roundScore >= 0 ? '#2ecc71' : '#e74c3c'}">${roundScore > 0 ? '+' : ''}${roundScore}</td>
+      <td>${p.score}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Waiting message (non-host)
+  const waitEl = document.getElementById('re-waiting');
+  waitEl.textContent = amHost ? '' : 'Waiting for host to start the next round…';
+
+  // Score history chart
+  if (gs.scoreHistory && gs.scoreHistory.length > 0) {
+    drawScoreChart(gs.scoreHistory, gs.players);
+  }
+}
+
+const CHART_COLORS = ['#f9d84b','#3a7abf','#27ae60','#e74c3c','#8e44ad','#e67e22','#1abc9c','#d35400','#2980b9','#c0392b'];
+
+function drawScoreChart(scoreHistory, players) {
+  const canvas = document.getElementById('re-chart');
+  if (!canvas) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const W   = canvas.parentElement.clientWidth || 600;
+  const H   = 220;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const ml = 48, mr = 16, mt = 18, mb = 30;
+  const cw = W - ml - mr;
+  const ch = H - mt - mb;
+  const n  = scoreHistory.length;
+
+  // Score range
+  let minS = 0, maxS = 0;
+  for (const snap of scoreHistory) {
+    for (const s of Object.values(snap)) {
+      if (s < minS) minS = s;
+      if (s > maxS) maxS = s;
+    }
+  }
+  const pad  = (maxS - minS) * 0.12 || 5;
+  const yMin = minS - pad;
+  const yMax = maxS + pad;
+
+  const toX = r => n <= 1 ? ml + cw / 2 : ml + ((r - 1) / (n - 1)) * cw;
+  const toY = s => mt + ch - ((s - yMin) / (yMax - yMin)) * ch;
+
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(ml, mt, cw, ch);
+
+  // Grid lines + y labels
+  const ySteps = 4;
+  for (let i = 0; i <= ySteps; i++) {
+    const s = yMin + (yMax - yMin) * (i / ySteps);
+    const y = toY(s);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(ml, y); ctx.lineTo(ml + cw, y); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(s), ml - 4, y + 3);
+  }
+
+  // X labels
+  const step = Math.ceil(n / 10);
+  for (let r = 1; r <= n; r++) {
+    if (r === 1 || r === n || r % step === 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(toX(r), mt); ctx.lineTo(toX(r), mt + ch); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(r, toX(r), mt + ch + 14);
+    }
+  }
+
+  // X-axis label
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Round', ml + cw / 2, H - 4);
+
+  // Zero line
+  if (yMin < 0 && yMax > 0) {
+    const y0 = toY(0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(ml, y0); ctx.lineTo(ml + cw, y0); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Player lines
+  players.forEach((p, i) => {
+    const color = CHART_COLORS[i % CHART_COLORS.length];
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let r = 1; r <= n; r++) {
+      const s = scoreHistory[r - 1][p.id] ?? 0;
+      if (r === 1) ctx.moveTo(toX(r), toY(s));
+      else         ctx.lineTo(toX(r), toY(s));
+    }
+    ctx.stroke();
+    // Dot at latest point
+    const last = scoreHistory[n - 1][p.id] ?? 0;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(toX(n), toY(last), 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Legend (top-left inside chart)
+  let ly = mt + 10;
+  players.forEach((p, i) => {
+    const color = CHART_COLORS[i % CHART_COLORS.length];
+    ctx.fillStyle = color;
+    ctx.fillRect(ml + 8, ly - 5, 14, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    const label = p.name.length > 13 ? p.name.slice(0, 12) + '…' : p.name;
+    ctx.fillText(label, ml + 26, ly);
+    ly += 14;
+  });
+}
+
+function renderGameOver(gs) {
+  const panel = document.getElementById('g-game-over');
+  panel.style.display = 'block';
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+
+  const winners = gs.winners ?? [];
+  document.getElementById('go-winners').textContent =
+    winners.length === 1
+      ? `🏆 ${winners[0]} wins!`
+      : `🏆 Tie: ${winners.join(' & ')}!`;
+
+  const sorted = [...gs.players].sort((a, b) => b.score - a.score);
+  const tbody = document.getElementById('go-tbody');
+  tbody.innerHTML = '';
+  sorted.forEach(p => {
+    const tr = document.createElement('tr');
+    const isMe = p.id === myPlayerId;
+    tr.style.fontWeight = isMe ? 'bold' : 'normal';
+    tr.innerHTML = `<td>${esc(p.name)}${isMe ? ' (you)' : ''}</td><td>${p.score}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ─── Actions: game ────────────────────────────────────────────────────────────
+function doPredict() {
+  const val = parseInt(document.getElementById('pred-input').value);
+  if (isNaN(val)) return;
+  send({ type: 'predict', value: val });
+}
+
+function doPlayCard(cardId) {
+  send({ type: 'play_card', cardId });
+}
+
+function doStartNextRound() {
+  send({ type: 'start_next_round' });
+}
+
+// ─── Client-side play validation (mirrors server logic, for greying out cards) ─
+function clientCanPlayCard(card, hand, leadSuit, trumpSuit) {
+  if (!leadSuit) return true;
+  const hasSuit = hand.some(c => c.suit === leadSuit);
+  if (hasSuit) return card.suit === leadSuit;
+  return true;
+}
+
+// ─── Utils ────────────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function trumpLabel(t) {
+  if (t === 'none') return 'No Trump';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function showGameMessage(msg, isError = false) {
+  const el = document.getElementById('g-message');
+  if (el) { el.textContent = msg; el.style.color = isError ? '#ff8080' : 'var(--yellow)'; }
+}
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Judgement Card Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1a6b3a;
+      color: #fff;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    h1 { text-align: center; margin-bottom: 12px; font-size: 1.6rem; letter-spacing: 2px; }
+
+    /* ---- Status bar ---- */
+    #status-bar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+    }
+    #status-bar span { background: rgba(255,255,255,0.1); border-radius: 4px; padding: 3px 8px; }
+
+    /* ---- Trick area ---- */
+    #trick-area {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      min-height: 130px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    /* ---- Players ---- */
+    #players-area { display: flex; flex-direction: column; gap: 10px; }
+
+    .player-panel {
+      background: rgba(0,0,0,0.25);
+      border-radius: 10px;
+      padding: 10px 12px;
+      border: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .player-panel.active { border-color: #f9d84b; }
+
+    .player-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+    .player-header .name { font-weight: bold; font-size: 1rem; }
+    .player-header .badge {
+      background: rgba(255,255,255,0.15);
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 0.78rem;
+    }
+    .player-header .badge.prediction { background: #3a7abf; }
+    .player-header .badge.tricks { background: #357a35; }
+    .player-header .badge.score { background: #7a3535; }
+
+    .hand {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    /* ---- Cards ---- */
+    .card-slot {
+      position: relative;
+      width: 70px;
+      height: 100px;
+    }
+    .card-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 6px;
+      background: #fff;
+      cursor: not-allowed;
+      opacity: 0.6;
+      transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s;
+    }
+    .card-slot img.playable {
+      cursor: pointer;
+      opacity: 1;
+    }
+    .card-slot img.playable:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    }
+    .card-slot img.trick-card {
+      cursor: default;
+      opacity: 1;
+    }
+    .card-owner {
+      position: absolute;
+      bottom: -16px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 0.68rem;
+      color: #ccc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ---- Prediction input ---- */
+    #prediction-panel {
+      background: rgba(0,0,0,0.35);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    #prediction-panel h3 { margin-bottom: 8px; }
+    #prediction-panel .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    #prediction-panel input[type=number] {
+      width: 70px;
+      padding: 6px;
+      border-radius: 6px;
+      border: none;
+      font-size: 1rem;
+      text-align: center;
+    }
+    #prediction-panel button, #next-round-btn, #start-btn {
+      padding: 7px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #prediction-panel button { background: #3a7abf; color: #fff; }
+    #next-round-btn { background: #f9d84b; color: #222; display: none; margin: 0 auto; display: none; }
+    #start-btn { background: #f9d84b; color: #222; font-size: 1rem; padding: 10px 28px; }
+
+    #message { text-align: center; min-height: 22px; font-size: 0.9rem; color: #f9d84b; margin-bottom: 8px; }
+
+    /* ---- Setup screen ---- */
+    #setup-screen {
+      max-width: 420px;
+      margin: 60px auto;
+      background: rgba(0,0,0,0.35);
+      border-radius: 12px;
+      padding: 28px;
+    }
+    #setup-screen h2 { margin-bottom: 16px; text-align: center; }
+    #setup-screen label { display: block; margin-bottom: 4px; font-size: 0.85rem; }
+    #setup-screen input[type=number],
+    #setup-screen textarea {
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+      border: none;
+      font-size: 0.9rem;
+      margin-bottom: 12px;
+    }
+    #setup-screen textarea { height: 100px; resize: vertical; font-family: inherit; }
+    #setup-screen .center { text-align: center; }
+    #setup-screen .hint { font-size: 0.78rem; color: #aaa; margin-top: -8px; margin-bottom: 10px; }
+
+    /* ---- Game over ---- */
+    #game-over-panel {
+      display: none;
+      text-align: center;
+      background: rgba(0,0,0,0.5);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 12px;
+    }
+    #game-over-panel h2 { font-size: 1.5rem; margin-bottom: 8px; }
+
+    /* ---- Scoreboard ---- */
+    #scoreboard {
+      background: rgba(0,0,0,0.3);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 0.85rem;
+    }
+    #scoreboard h3 { margin-bottom: 6px; }
+    #scoreboard table { width: 100%; border-collapse: collapse; }
+    #scoreboard td, #scoreboard th {
+      padding: 4px 8px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    #scoreboard th { font-weight: bold; color: #f9d84b; }
+
+    #game-area { display: none; }
+  </style>
+</head>
+<body>
+  <h1>&#9824; Judgement &#9830;</h1>
+
+  <!-- Setup Screen -->
+  <div id="setup-screen">
+    <h2>New Game</h2>
+    <label>Number of players (4–10):</label>
+    <input type="number" id="player-count" min="4" max="10" value="4" />
+
+    <label>Player names (one per line):</label>
+    <textarea id="player-names">Alice
+Bob
+Carol
+Dave</textarea>
+    <p class="hint">Names must match player count above.</p>
+
+    <div class="center">
+      <button id="start-btn" onclick="setupGame()">Start Game</button>
+    </div>
+  </div>
+
+  <!-- Game Area -->
+  <div id="game-area">
+    <div id="status-bar">
+      <span id="sb-round"></span>
+      <span id="sb-trump"></span>
+      <span id="sb-cards"></span>
+      <span id="sb-phase"></span>
+      <span id="sb-current"></span>
+    </div>
+
+    <div id="message"></div>
+
+    <div id="prediction-panel">
+      <h3 id="prediction-title"></h3>
+      <div class="row">
+        <input type="number" id="pred-input" min="0" value="0" />
+        <button onclick="submitPrediction()">Predict</button>
+        <span id="pred-hint" style="font-size:0.8rem; color:#aaa;"></span>
+      </div>
+    </div>
+
+    <div id="trick-area"></div>
+
+    <button id="next-round-btn" onclick="nextRound()" style="display:none; margin:0 auto 12px; padding:9px 24px;">Next Round &#8594;</button>
+
+    <div id="game-over-panel">
+      <h2>&#127942; Game Over!</h2>
+      <p id="game-over-msg"></p>
+      <br/>
+      <button onclick="location.reload()" style="background:#f9d84b;color:#222;border:none;border-radius:6px;padding:9px 22px;cursor:pointer;font-weight:bold;">Play Again</button>
+    </div>
+
+    <div id="scoreboard">
+      <h3>Scoreboard</h3>
+      <table id="score-table"><thead><tr><th>Player</th><th>Score</th><th>Predicted</th><th>Won</th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div id="players-area"></div>
+  </div>
+
+<script>
+// ============================================================
+// Embedded game engine (mirrors src/game/*.ts logic in plain JS)
+// so the HTML file works standalone without a build step.
+// ============================================================
+
+const RANK_VALUES = {
+  '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,
+  'jack':11,'queen':12,'king':13,'ace':14
+};
+const ALL_SUITS = ['spades','diamonds','clubs','hearts'];
+const ALL_RANKS = ['2','3','4','5','6','7','8','9','10','jack','queen','king','ace'];
+const TRUMP_CYCLE = ['spades','diamonds','clubs','hearts','none'];
+
+function cardId(rank, suit) { return `${rank}_of_${suit}`; }
+
+function createDeck() {
+  const deck = [];
+  for (const suit of ALL_SUITS)
+    for (const rank of ALL_RANKS)
+      deck.push({ id: cardId(rank, suit), suit, rank });
+  return deck;
+}
+
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffleDeck(deck, rng) {
+  const s = [...deck];
+  for (let i = s.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [s[i], s[j]] = [s[j], s[i]];
+  }
+  return s;
+}
+
+function dealCards(deck, playerCount, cardsPerPlayer) {
+  const hands = Array.from({length: playerCount}, () => []);
+  let idx = 0;
+  for (let r = 0; r < cardsPerPlayer; r++)
+    for (let p = 0; p < playerCount; p++)
+      hands[p].push(deck[idx++]);
+  return hands;
+}
+
+function getStartingCardCount(n) {
+  if (n >= 4 && n <= 7) return 7;
+  if (n === 8) return 6;
+  if (n === 9) return 5;
+  if (n === 10) return 4;
+  throw new Error('Invalid player count');
+}
+
+function generateRoundSequence(start) {
+  const seq = [];
+  for (let i = start; i >= 1; i--) seq.push(i);
+  for (let i = 2; i <= start; i++) seq.push(i);
+  return seq;
+}
+
+function getTrumpForRound(roundNumber) {
+  return TRUMP_CYCLE[(roundNumber - 1) % TRUMP_CYCLE.length];
+}
+
+function trumpLabel(t) {
+  return t === 'none' ? 'No Trump' : t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function mustFollowSuit(hand, leadSuit) {
+  return hand.some(c => c.suit === leadSuit);
+}
+
+function canPlayCard(card, hand, leadSuit, trumpSuit) {
+  if (leadSuit === null) return true;
+  if (hand.some(c => c.suit === leadSuit)) return card.suit === leadSuit;
+  return true;
+}
+
+function determineTrickWinner(trickCards, leadSuit, trumpSuit) {
+  const trumpCards = trumpSuit !== 'none' ? trickCards.filter(tc => tc.card.suit === trumpSuit) : [];
+  if (trumpCards.length > 0) {
+    return trumpCards.reduce((b, c) => RANK_VALUES[c.card.rank] > RANK_VALUES[b.card.rank] ? c : b).playerId;
+  }
+  const leadCards = trickCards.filter(tc => tc.card.suit === leadSuit);
+  return leadCards.reduce((b, c) => RANK_VALUES[c.card.rank] > RANK_VALUES[b.card.rank] ? c : b).playerId;
+}
+
+function validatePrediction(prediction, cardsPerPlayer, existing, isLast) {
+  if (!Number.isInteger(prediction) || prediction < 0 || prediction > cardsPerPlayer)
+    return { valid: false, reason: `Must be 0–${cardsPerPlayer}` };
+  if (isLast) {
+    const sum = existing.reduce((a, b) => a + b, 0);
+    const forbidden = cardsPerPlayer - sum;
+    if (prediction === forbidden)
+      return { valid: false, reason: `Cannot predict ${prediction} (would make total = ${cardsPerPlayer})` };
+  }
+  return { valid: true };
+}
+
+function calculateRoundScore(predicted, won) {
+  return predicted === won ? 11 * predicted + 10 : -11 * predicted - 1;
+}
+
+// ============================================================
+// Game state
+// ============================================================
+let G = null; // global game state
+
+function setupGame() {
+  const count = parseInt(document.getElementById('player-count').value);
+  const namesRaw = document.getElementById('player-names').value.trim().split('\n').map(n => n.trim()).filter(Boolean);
+  if (namesRaw.length !== count) { alert(`Please enter exactly ${count} names.`); return; }
+  if (count < 4 || count > 10) { alert('Player count must be 4–10.'); return; }
+
+  const startingCards = getStartingCardCount(count);
+  const roundSeq = generateRoundSequence(startingCards);
+  const seed = Date.now();
+
+  G = {
+    players: namesRaw.map((name, i) => ({
+      id: `p${i}`, name,
+      hand: [], predictedTricks: null, tricksWon: 0, score: 0
+    })),
+    roundSequence: roundSeq,
+    roundNumber: 1,
+    startingCards,
+    totalRounds: roundSeq.length,
+    cardsPerPlayer: roundSeq[0],
+    trumpSuit: getTrumpForRound(1),
+    trickCards: [],
+    leadSuit: null,
+    phase: 'prediction',
+    roundLeaderIndex: 0,
+    trickLeaderIndex: 0,
+    currentPlayer: 0,
+    discardPile: [],
+    tricksPlayedThisRound: 0,
+    lastTrickWinnerId: null,
+    seed,
+  };
+
+  dealRound();
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('game-area').style.display = 'block';
+  render();
+}
+
+function dealRound() {
+  const rng = mulberry32(G.seed + G.roundNumber);
+  const shuffled = shuffleDeck(createDeck(), rng);
+  const hands = dealCards(shuffled, G.players.length, G.cardsPerPlayer);
+  G.players = G.players.map((p, i) => ({
+    ...p,
+    hand: hands[i],
+    predictedTricks: null,
+    tricksWon: 0,
+  }));
+  G.trickCards = [];
+  G.leadSuit = null;
+  G.tricksPlayedThisRound = 0;
+  G.lastTrickWinnerId = null;
+  G.trumpSuit = getTrumpForRound(G.roundNumber);
+  G.roundLeaderIndex = (G.roundNumber - 1) % G.players.length;
+  G.trickLeaderIndex = G.roundLeaderIndex;
+  G.currentPlayer = G.roundLeaderIndex;
+  G.phase = 'prediction';
+}
+
+function submitPrediction() {
+  const val = parseInt(document.getElementById('pred-input').value);
+  const p = G.currentPlayer;
+  const predicted = G.players.filter(pl => pl.predictedTricks !== null).map(pl => pl.predictedTricks);
+  const isLast = predicted.length === G.players.length - 1;
+  const v = validatePrediction(val, G.cardsPerPlayer, predicted, isLast);
+  if (!v.valid) { showMessage(v.reason, true); return; }
+
+  G.players[p].predictedTricks = val;
+  const allDone = G.players.every(pl => pl.predictedTricks !== null);
+  if (allDone) {
+    G.phase = 'playing';
+    G.currentPlayer = G.trickLeaderIndex;
+  } else {
+    G.currentPlayer = (G.currentPlayer + 1) % G.players.length;
+  }
+  showMessage('');
+  render();
+}
+
+function doPlayCard(cardId) {
+  if (G.phase !== 'playing') return;
+  const p = G.players[G.currentPlayer];
+  const cardIdx = p.hand.findIndex(c => c.id === cardId);
+  if (cardIdx === -1) return;
+  const card = p.hand[cardIdx];
+  if (!canPlayCard(card, p.hand, G.leadSuit, G.trumpSuit)) {
+    showMessage(`Must follow suit: ${G.leadSuit}`, true); return;
+  }
+  p.hand = p.hand.filter((_, i) => i !== cardIdx);
+  G.trickCards.push({ playerId: p.id, card });
+  if (G.leadSuit === null) G.leadSuit = card.suit;
+  showMessage('');
+
+  if (G.trickCards.length === G.players.length) {
+    setTimeout(resolveTrick, 600);
+  } else {
+    G.currentPlayer = (G.currentPlayer + 1) % G.players.length;
+    render();
+  }
+}
+
+function resolveTrick() {
+  const winnerId = determineTrickWinner(G.trickCards, G.leadSuit, G.trumpSuit);
+  const winnerIdx = G.players.findIndex(p => p.id === winnerId);
+  G.players[winnerIdx].tricksWon++;
+  G.discardPile.push(...G.trickCards.map(tc => tc.card));
+  G.tricksPlayedThisRound++;
+  G.lastTrickWinnerId = winnerId;
+
+  const winnerName = G.players[winnerIdx].name;
+  showMessage(`${winnerName} wins the trick!`);
+
+  G.trickCards = [];
+  G.leadSuit = null;
+
+  if (G.tricksPlayedThisRound === G.cardsPerPlayer) {
+    endRound();
+  } else {
+    G.trickLeaderIndex = winnerIdx;
+    G.currentPlayer = winnerIdx;
+    G.phase = 'playing';
+    render();
+  }
+}
+
+function endRound() {
+  G.players.forEach(p => {
+    const pred = p.predictedTricks ?? 0;
+    p.score += calculateRoundScore(pred, p.tricksWon);
+  });
+  if (G.roundNumber >= G.totalRounds) {
+    G.phase = 'game_over';
+  } else {
+    G.phase = 'round_end';
+    G.roundNumber++;
+    G.cardsPerPlayer = G.roundSequence[G.roundNumber - 1];
+  }
+  render();
+}
+
+function nextRound() {
+  dealRound();
+  render();
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function showMessage(msg, isError = false) {
+  const el = document.getElementById('message');
+  el.textContent = msg;
+  el.style.color = isError ? '#ff7b7b' : '#f9d84b';
+}
+
+function render() {
+  renderStatusBar();
+  renderTrick();
+  renderPredictionPanel();
+  renderPlayers();
+  renderScoreboard();
+  renderNextRoundBtn();
+  renderGameOver();
+}
+
+function renderStatusBar() {
+  const phaseLabels = { prediction:'Prediction Phase', playing:'Playing', round_end:'Round Over', game_over:'Game Over' };
+  document.getElementById('sb-round').textContent = `Round ${G.roundNumber} / ${G.totalRounds}`;
+  document.getElementById('sb-trump').textContent = `Trump: ${trumpLabel(G.trumpSuit)}`;
+  document.getElementById('sb-cards').textContent = `Cards: ${G.cardsPerPlayer}`;
+  document.getElementById('sb-phase').textContent = phaseLabels[G.phase] || G.phase;
+  const cur = G.players[G.currentPlayer];
+  document.getElementById('sb-current').textContent = `Turn: ${cur ? cur.name : '—'}`;
+}
+
+function renderTrick() {
+  const area = document.getElementById('trick-area');
+  area.innerHTML = '';
+  if (G.trickCards.length === 0) {
+    area.innerHTML = '<span style="color:rgba(255,255,255,0.3);align-self:center;">— trick area —</span>';
+    return;
+  }
+  G.trickCards.forEach(tc => {
+    const player = G.players.find(p => p.id === tc.playerId);
+    const slot = document.createElement('div');
+    slot.className = 'card-slot';
+    slot.style.marginBottom = '20px';
+    const img = document.createElement('img');
+    img.src = `../../assets/cards/${tc.card.id}.svg`;
+    img.className = 'trick-card';
+    img.alt = tc.card.id;
+    img.onerror = () => { img.src = ''; img.style.background = '#fff'; img.style.display='flex'; };
+    slot.appendChild(img);
+    const label = document.createElement('div');
+    label.className = 'card-owner';
+    label.textContent = player ? player.name : tc.playerId;
+    slot.appendChild(label);
+    area.appendChild(slot);
+  });
+}
+
+function renderPredictionPanel() {
+  const panel = document.getElementById('prediction-panel');
+  const title = document.getElementById('prediction-title');
+  const hint = document.getElementById('pred-hint');
+  const input = document.getElementById('pred-input');
+
+  if (G.phase !== 'prediction') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+
+  const cur = G.players[G.currentPlayer];
+  title.textContent = `${cur.name}: make your prediction (0–${G.cardsPerPlayer})`;
+  input.max = G.cardsPerPlayer;
+  input.value = 0;
+
+  const predicted = G.players.filter(p => p.predictedTricks !== null).map(p => p.predictedTricks);
+  const isLast = predicted.length === G.players.length - 1;
+  if (isLast) {
+    const sum = predicted.reduce((a, b) => a + b, 0);
+    const forbidden = G.cardsPerPlayer - sum;
+    hint.textContent = `Cannot predict: ${forbidden}`;
+  } else {
+    hint.textContent = '';
+  }
+}
+
+function renderPlayers() {
+  const area = document.getElementById('players-area');
+  area.innerHTML = '';
+  G.players.forEach((player, idx) => {
+    const panel = document.createElement('div');
+    panel.className = 'player-panel' + (idx === G.currentPlayer ? ' active' : '');
+
+    const header = document.createElement('div');
+    header.className = 'player-header';
+    header.innerHTML = `<span class="name">${player.name}</span>`;
+    if (player.predictedTricks !== null)
+      header.innerHTML += `<span class="badge prediction">Predicted: ${player.predictedTricks}</span>`;
+    header.innerHTML += `<span class="badge tricks">Won: ${player.tricksWon}</span>`;
+    header.innerHTML += `<span class="badge score">Score: ${player.score}</span>`;
+
+    const hand = document.createElement('div');
+    hand.className = 'hand';
+
+    player.hand.forEach(card => {
+      const slot = document.createElement('div');
+      slot.className = 'card-slot';
+      const img = document.createElement('img');
+      img.src = `../../assets/cards/${card.id}.svg`;
+      img.alt = card.id;
+      img.title = card.id.replace(/_/g, ' ');
+
+      const isCurrentPlayer = idx === G.currentPlayer;
+      const isPlayable = G.phase === 'playing' && isCurrentPlayer &&
+        canPlayCard(card, player.hand, G.leadSuit, G.trumpSuit);
+
+      img.className = isPlayable ? 'playable' : '';
+      if (isPlayable) img.onclick = () => doPlayCard(card.id);
+
+      slot.appendChild(img);
+      hand.appendChild(slot);
+    });
+
+    panel.appendChild(header);
+    panel.appendChild(hand);
+    area.appendChild(panel);
+  });
+}
+
+function renderScoreboard() {
+  const tbody = document.querySelector('#score-table tbody');
+  tbody.innerHTML = '';
+  const sorted = [...G.players].sort((a, b) => b.score - a.score);
+  sorted.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${p.name}</td><td>${p.score}</td><td>${p.predictedTricks ?? '—'}</td><td>${p.tricksWon}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderNextRoundBtn() {
+  const btn = document.getElementById('next-round-btn');
+  btn.style.display = G.phase === 'round_end' ? 'block' : 'none';
+}
+
+function renderGameOver() {
+  const panel = document.getElementById('game-over-panel');
+  if (G.phase !== 'game_over') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const maxScore = Math.max(...G.players.map(p => p.score));
+  const winners = G.players.filter(p => p.score === maxScore);
+  document.getElementById('game-over-msg').textContent =
+    winners.length === 1
+      ? `${winners[0].name} wins with ${winners[0].score} points!`
+      : `Tie between ${winners.map(w => w.name).join(' & ')} with ${maxScore} points!`;
+}
+</script>
+</body>
+</html>

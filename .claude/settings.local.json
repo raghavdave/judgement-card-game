@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//usr/local/bin/**)",
+      "Read(//usr/bin/**)",
+      "Bash(echo \"PATH: $PATH\")"
+    ]
+  }
+}
