@@ -534,7 +534,7 @@
       <tbody id="go-tbody"></tbody>
     </table>
     <div style="margin-top:18px">
-      <button class="btn-primary" onclick="location.reload()">Play Again</button>
+      <button class="btn-primary" onclick="clearReconnectData();location.reload()">Play Again</button>
     </div>
   </div>
 </div>
@@ -619,7 +619,16 @@ function connect() {
   const url = `${protocol}//${window.location.host}`;
   ws = new WebSocket(url);
 
-  ws.onopen = () => {};
+  ws.onopen = () => {
+    // If we have saved lobby credentials (e.g. host switched to another app), try to rejoin
+    const saved = loadReconnectData();
+    if (saved && !myPlayerId) {
+      myPlayerId = saved.playerId;
+      myRoomCode = saved.roomCode;
+      amHost     = saved.isHost;
+      send({ type: 'reconnect', playerId: saved.playerId, code: saved.roomCode, isHost: saved.isHost, name: saved.name });
+    }
+  };
 
   ws.onmessage = (ev) => {
     let msg;
@@ -632,8 +641,17 @@ function connect() {
       document.getElementById('g-disconnected').classList.add('show');
       document.getElementById('dc-msg').textContent = 'Connection to the server was lost.';
     }
+    // Reset so a new connect() attempt starts fresh
+    myPlayerId = null;
   };
 }
+
+// Re-establish the WebSocket when the user switches back to this tab/app
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && (!ws || ws.readyState === WebSocket.CLOSED)) {
+    connect();
+  }
+});
 
 function send(msg) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -652,6 +670,8 @@ function handleMessage(msg) {
       myPlayerId = msg.playerId;
       myRoomCode = msg.roomCode;
       amHost = msg.isHost;
+      // Persist credentials so we can rejoin if the tab goes to background
+      saveReconnectData();
       showScreen('s-lobby');
       break;
 
@@ -660,7 +680,16 @@ function handleMessage(msg) {
       break;
 
     case 'game_started':
+      clearReconnectData(); // room code no longer needed once game is live
       showScreen('s-game');
+      break;
+
+    case 'reconnect_failed':
+      // Room expired — clear stale data and show home screen
+      clearReconnectData();
+      myPlayerId = null; myRoomCode = null; amHost = false;
+      showScreen('s-home');
+      showHomeError('Your room expired. Please host or join a new game.');
       break;
 
     case 'game_state':
@@ -1222,6 +1251,22 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ─── Reconnect helpers ────────────────────────────────────────────────────────
+function saveReconnectData() {
+  const name = amHost
+    ? (document.getElementById('host-name')?.value?.trim() || '')
+    : (document.getElementById('join-name')?.value?.trim() || '');
+  try {
+    sessionStorage.setItem('jdg_rc', JSON.stringify({ playerId: myPlayerId, roomCode: myRoomCode, isHost: amHost, name }));
+  } catch {}
+}
+function loadReconnectData() {
+  try { return JSON.parse(sessionStorage.getItem('jdg_rc') || 'null'); } catch { return null; }
+}
+function clearReconnectData() {
+  try { sessionStorage.removeItem('jdg_rc'); } catch {}
 }
 
 // ─── Game parameter sliders ───────────────────────────────────────────────────

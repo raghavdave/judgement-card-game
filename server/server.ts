@@ -62,6 +62,8 @@ interface Room {
   trickPreviewActive: boolean;
   /** Cumulative score snapshot at the end of each round (index 0 = round 1). */
   scoreHistory: Array<{ [playerId: string]: number }>;
+  /** Pending cleanup timer — set when lobby empties, cancelled on reconnect. */
+  cleanupTimer: ReturnType<typeof setTimeout> | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +336,7 @@ wss.on('connection', (ws) => {
         botTurnTimer: null,
         trickPreviewActive: false,
         scoreHistory: [],
+        cleanupTimer: null,
       };
       newRoom.players.set(myId, { kind: 'human', ws, id: myId, name: String(msg.name).trim() || 'Host', isHost: true });
       rooms.set(code, newRoom);
@@ -354,6 +357,28 @@ wss.on('connection', (ws) => {
       myCode = code;
       targetRoom.players.set(myId, { kind: 'human', ws, id: myId, name: String(msg.name).trim() || 'Player', isHost: false });
       sendTo(ws, { type: 'joined', playerId: myId, isHost: false, roomCode: code });
+      broadcastLobbyState(targetRoom);
+    }
+
+    // ── Reconnect (player returning after mobile app-switch) ────────────────
+    else if (msg.type === 'reconnect') {
+      if (myCode) return; // already in a room
+      const code = String(msg.code ?? '').toUpperCase().trim();
+      const prevId = String(msg.playerId ?? '');
+      const targetRoom = rooms.get(code);
+      if (!targetRoom || targetRoom.phase === 'playing') {
+        sendTo(ws, { type: 'reconnect_failed' }); return;
+      }
+      // Cancel pending cleanup timer
+      if (targetRoom.cleanupTimer) { clearTimeout(targetRoom.cleanupTimer); targetRoom.cleanupTimer = null; }
+      // Determine host: trust client claim only when room has no existing host
+      const hasHost = Array.from(targetRoom.players.values()).some(p => isHuman(p) && (p as HumanPlayer).isHost);
+      const isHostClaim = msg.isHost === true && !hasHost;
+      myId = prevId || generateId();
+      myCode = code;
+      const name = String(msg.name ?? '').trim() || (isHostClaim ? 'Host' : 'Player');
+      targetRoom.players.set(myId, { kind: 'human', ws, id: myId, name, isHost: isHostClaim });
+      sendTo(ws, { type: 'joined', playerId: myId, isHost: isHostClaim, roomCode: code });
       broadcastLobbyState(targetRoom);
     }
 
@@ -456,7 +481,13 @@ wss.on('connection', (ws) => {
     const humanCount = Array.from(room.players.values()).filter(isHuman).length;
     if (humanCount === 0) {
       if (room.botTurnTimer) clearTimeout(room.botTurnTimer);
-      rooms.delete(myCode);
+      if (room.phase === 'lobby') {
+        // Keep the room alive for 90 s so the host can switch back from another app
+        if (room.cleanupTimer) clearTimeout(room.cleanupTimer);
+        room.cleanupTimer = setTimeout(() => { rooms.delete(myCode!); }, 90_000);
+      } else {
+        rooms.delete(myCode);
+      }
       return;
     }
 
