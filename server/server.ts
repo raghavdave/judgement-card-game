@@ -2,7 +2,6 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import path from 'path';
-import os from 'os';
 
 import {
   startGame,
@@ -18,7 +17,7 @@ import { botPrediction, botChooseCard, BotPublicState } from './botAI';
 // Server setup
 // ---------------------------------------------------------------------------
 
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT ?? '3000');
 const app = express();
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
@@ -50,6 +49,7 @@ function isBot(p: RoomPlayer): p is BotPlayer { return p.kind === 'bot'; }
 function isHuman(p: RoomPlayer): p is HumanPlayer { return p.kind === 'human'; }
 
 interface Room {
+  code: string;
   maxPlayers: number;
   players: Map<string, RoomPlayer>;
   gameState: GameState | null;
@@ -62,31 +62,33 @@ interface Room {
 }
 
 // ---------------------------------------------------------------------------
-// State
+// State — all active rooms keyed by their 4-char code
 // ---------------------------------------------------------------------------
 
-let room: Room | null = null;
+const rooms = new Map<string, Room>();
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getLocalIP(): string {
-  for (const netList of Object.values(os.networkInterfaces())) {
-    for (const net of netList ?? []) {
-      if (net.family === 'IPv4' && !net.internal) return net.address;
-    }
-  }
-  return 'localhost';
+/** Generate a unique 4-character room code (unambiguous charset: no O/0, I/1/L). */
+function generateRoomCode(): string {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let code: string;
+  do {
+    code = Array.from({ length: 4 }, () =>
+      chars[Math.floor(Math.random() * chars.length)]
+    ).join('');
+  } while (rooms.has(code));
+  return code;
 }
 
 function sendTo(ws: WebSocket, msg: object): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
-/** Broadcast only to human (WebSocket-connected) players. */
-function broadcastHumans(msg: object, excludeId?: string): void {
-  if (!room) return;
+/** Broadcast to all human players in a room. */
+function broadcastHumans(room: Room, msg: object, excludeId?: string): void {
   for (const p of room.players.values()) {
     if (isHuman(p) && p.id !== excludeId) sendTo(p.ws, msg);
   }
@@ -100,9 +102,7 @@ function generateId(): string {
 // Lobby broadcast
 // ---------------------------------------------------------------------------
 
-function broadcastLobbyState(): void {
-  if (!room) return;
-  const joinUrl = `http://${getLocalIP()}:${PORT}`;
+function broadcastLobbyState(room: Room): void {
   const canStart = room.players.size >= 2 && room.players.size === room.maxPlayers;
 
   const players = Array.from(room.players.values()).map(p => ({
@@ -116,10 +116,10 @@ function broadcastLobbyState(): void {
     if (isHuman(p)) {
       sendTo(p.ws, {
         type: 'lobby_update',
+        roomCode: room.code,
         maxPlayers: room.maxPlayers,
         currentCount: room.players.size,
         players,
-        joinUrl,
         canStart,
         isHost: p.isHost,
       });
@@ -131,7 +131,7 @@ function broadcastLobbyState(): void {
 // Game state broadcast — each human gets only their own hand
 // ---------------------------------------------------------------------------
 
-function buildClientState(gs: GameState, forPlayerId: string) {
+function buildClientState(room: Room, gs: GameState, forPlayerId: string) {
   const currentPlayerObj = gs.players[gs.currentPlayer];
   return {
     phase: gs.phase,
@@ -152,8 +152,8 @@ function buildClientState(gs: GameState, forPlayerId: string) {
       predictedTricks: p.predictedTricks,
       tricksWon: p.tricksWon,
       handSize: p.hand.length,
-      isBot: room?.players.get(p.id) ? isBot(room.players.get(p.id)!) : false,
-      isHost: room?.players.get(p.id) && isHuman(room.players.get(p.id)!)
+      isBot: room.players.get(p.id) ? isBot(room.players.get(p.id)!) : false,
+      isHost: room.players.get(p.id) && isHuman(room.players.get(p.id)!)
         ? (room.players.get(p.id) as HumanPlayer).isHost
         : false,
     })),
@@ -164,23 +164,22 @@ function buildClientState(gs: GameState, forPlayerId: string) {
       card: tc.card,
     })),
     winners: gs.phase === 'game_over' ? getWinners(gs).map(p => p.name) : null,
-    scoreHistory: room?.scoreHistory ?? [],
+    scoreHistory: room.scoreHistory,
   };
 }
 
-function broadcastGameState(): void {
-  if (!room?.gameState) return;
+function broadcastGameState(room: Room): void {
+  if (!room.gameState) return;
   for (const [id, p] of room.players) {
-    if (isHuman(p)) sendTo(p.ws, { type: 'game_state', state: buildClientState(room.gameState, id) });
+    if (isHuman(p)) sendTo(p.ws, { type: 'game_state', state: buildClientState(room, room.gameState, id) });
   }
-  scheduleCheckBotTurn();
+  scheduleCheckBotTurn(room);
 }
 
 /** Broadcast a specific state snapshot without triggering bot scheduling. */
-function broadcastStateSnapshot(gs: GameState): void {
-  if (!room) return;
+function broadcastStateSnapshot(room: Room, gs: GameState): void {
   for (const [id, p] of room.players) {
-    if (isHuman(p)) sendTo(p.ws, { type: 'game_state', state: buildClientState(gs, id) });
+    if (isHuman(p)) sendTo(p.ws, { type: 'game_state', state: buildClientState(room, gs, id) });
   }
 }
 
@@ -189,27 +188,22 @@ function broadcastStateSnapshot(gs: GameState): void {
  * When the last card of a trick is played, broadcasts a 5-second preview showing
  * all played cards before resolving. Returns an error string on failure, null on success.
  */
-function processCardPlay(gs: GameState, cardId: string): string | null {
-  if (!room) return 'Room not available';
-
+function processCardPlay(room: Room, gs: GameState, cardId: string): string | null {
   const isLastCardInTrick = gs.trickCards.length + 1 === gs.players.length;
   const playerIndex = gs.currentPlayer;
   const player = gs.players[playerIndex];
 
   const { state: resolvedState, error } = enginePlayCard(gs, cardId);
   if (error) return error;
-  if (!room) return null;
 
   room.gameState = resolvedState;
 
   if (isLastCardInTrick) {
-    // Build a preview state: all trick cards visible + winner info from the resolved state
     const playedCard = player.hand.find(c => c.id === cardId)!;
     const previewState: GameState = {
       ...gs,
       trickCards: [...gs.trickCards, { playerId: player.id, card: playedCard }],
       leadSuit: gs.leadSuit ?? playedCard.suit,
-      // Include the winner ID so clients can display "X wins this trick!"
       lastTrickWinnerId: resolvedState.lastTrickWinnerId,
       players: gs.players.map((p, i) =>
         i === playerIndex ? { ...p, hand: p.hand.filter(c => c.id !== cardId) } : p
@@ -217,18 +211,18 @@ function processCardPlay(gs: GameState, cardId: string): string | null {
     };
 
     room.trickPreviewActive = true;
-    broadcastStateSnapshot(previewState); // show complete trick for 5 seconds
+    broadcastStateSnapshot(room, previewState);
 
     setTimeout(() => {
-      if (!room) return;
+      if (!rooms.has(room.code)) return; // room was torn down
       room.trickPreviewActive = false;
-      if (room.gameState?.phase === 'round_end') captureRoundScores(room.gameState);
-      broadcastGameState(); // broadcast actual resolved state + schedule any bot turns
+      if (room.gameState?.phase === 'round_end') captureRoundScores(room, room.gameState);
+      broadcastGameState(room);
     }, 5000);
 
   } else {
-    if (resolvedState.phase === 'round_end') captureRoundScores(resolvedState);
-    broadcastGameState();
+    if (resolvedState.phase === 'round_end') captureRoundScores(room, resolvedState);
+    broadcastGameState(room);
   }
 
   return null;
@@ -254,51 +248,48 @@ function buildBotPublicState(gs: GameState): BotPublicState {
   };
 }
 
-function scheduleCheckBotTurn(): void {
-  if (!room) return;
+function scheduleCheckBotTurn(room: Room): void {
   if (room.botTurnTimer) clearTimeout(room.botTurnTimer);
-  // Stagger bot actions: 900ms–1500ms so they feel like thinking
   const delay = 900 + Math.floor(Math.random() * 600);
   room.botTurnTimer = setTimeout(() => {
-    if (room) room.botTurnTimer = null;
-    checkAndExecuteBotTurn();
+    room.botTurnTimer = null;
+    checkAndExecuteBotTurn(room);
   }, delay);
 }
 
-function checkAndExecuteBotTurn(): void {
-  if (!room?.gameState) return;
-  if (room.trickPreviewActive) return; // wait for the 5s preview to finish
+function checkAndExecuteBotTurn(room: Room): void {
+  if (!room.gameState) return;
+  if (room.trickPreviewActive) return;
   const gs = room.gameState;
   if (gs.phase !== 'prediction' && gs.phase !== 'playing') return;
 
   const currentGamePlayer = gs.players[gs.currentPlayer];
   const roomPlayer = room.players.get(currentGamePlayer.id);
-  if (!roomPlayer || isHuman(roomPlayer)) return; // not a bot's turn
+  if (!roomPlayer || isHuman(roomPlayer)) return;
 
   const publicState = buildBotPublicState(gs);
 
   if (gs.phase === 'prediction') {
     const pred = botPrediction(currentGamePlayer.hand, publicState, currentGamePlayer.id);
     const { state, error } = makePrediction(gs, pred);
-    if (!error && room) {
+    if (!error) {
       room.gameState = state;
-      if (state.phase === 'round_end') captureRoundScores(state);
-      broadcastGameState();
+      if (state.phase === 'round_end') captureRoundScores(room, state);
+      broadcastGameState(room);
     }
   } else if (gs.phase === 'playing') {
     const cardId = botChooseCard(currentGamePlayer.hand, publicState, currentGamePlayer.id);
-    processCardPlay(gs, cardId); // handles trick preview + broadcast
+    processCardPlay(room, gs, cardId);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Round score capture (called before broadcasting round_end state)
+// Round score capture
 // ---------------------------------------------------------------------------
 
-function captureRoundScores(gs: GameState): void {
-  if (!room) return;
+function captureRoundScores(room: Room, gs: GameState): void {
   const roundIdx = gs.roundNumber - 1;
-  if (room.scoreHistory.length > roundIdx) return; // already captured this round
+  if (room.scoreHistory.length > roundIdx) return;
   const snapshot: { [playerId: string]: number } = {};
   for (const p of gs.players) snapshot[p.id] = p.score;
   room.scoreHistory.push(snapshot);
@@ -310,21 +301,7 @@ function captureRoundScores(gs: GameState): void {
 
 wss.on('connection', (ws) => {
   let myId: string | null = null;
-
-  // Tell new connection the current room status
-  if (!room) {
-    sendTo(ws, { type: 'room_status', status: 'no_room' });
-  } else if (room.phase === 'playing') {
-    sendTo(ws, { type: 'room_status', status: 'in_progress' });
-  } else if (room.players.size >= room.maxPlayers) {
-    sendTo(ws, { type: 'room_status', status: 'full' });
-  } else {
-    sendTo(ws, {
-      type: 'room_status', status: 'open',
-      currentCount: room.players.size,
-      maxPlayers: room.maxPlayers,
-    });
-  }
+  let myCode: string | null = null;
 
   ws.on('message', (data) => {
     let msg: any;
@@ -332,13 +309,13 @@ wss.on('connection', (ws) => {
 
     // ── Host ────────────────────────────────────────────────────────────────
     if (msg.type === 'host') {
-      if (room) {
-        sendTo(ws, { type: 'error', message: 'A game is already being hosted on this server.' });
-        return;
-      }
+      if (myCode) { sendTo(ws, { type: 'error', message: 'Already in a room.' }); return; }
       const maxPlayers = Math.min(10, Math.max(2, Number(msg.maxPlayers) || 4));
+      const code = generateRoomCode();
       myId = generateId();
-      room = {
+      myCode = code;
+      const newRoom: Room = {
+        code,
         maxPlayers,
         players: new Map(),
         gameState: null,
@@ -347,115 +324,119 @@ wss.on('connection', (ws) => {
         trickPreviewActive: false,
         scoreHistory: [],
       };
-      room.players.set(myId, { kind: 'human', ws, id: myId, name: String(msg.name).trim() || 'Host', isHost: true });
-      sendTo(ws, { type: 'joined', playerId: myId, isHost: true });
-      broadcastLobbyState();
+      newRoom.players.set(myId, { kind: 'human', ws, id: myId, name: String(msg.name).trim() || 'Host', isHost: true });
+      rooms.set(code, newRoom);
+      sendTo(ws, { type: 'joined', playerId: myId, isHost: true, roomCode: code });
+      broadcastLobbyState(newRoom);
     }
 
     // ── Join ────────────────────────────────────────────────────────────────
     else if (msg.type === 'join') {
-      if (!room) { sendTo(ws, { type: 'error', message: 'No game is currently being hosted.' }); return; }
-      if (room.phase === 'playing') { sendTo(ws, { type: 'error', message: 'Game already started.' }); return; }
-      if (room.players.size >= room.maxPlayers) { sendTo(ws, { type: 'error', message: 'The room is full.' }); return; }
+      if (myCode) { sendTo(ws, { type: 'error', message: 'Already in a room.' }); return; }
+      const code = String(msg.code ?? '').toUpperCase().trim();
+      if (code.length !== 4) { sendTo(ws, { type: 'error', message: 'Please enter a 4-character room code.' }); return; }
+      const targetRoom = rooms.get(code);
+      if (!targetRoom) { sendTo(ws, { type: 'error', message: `No room found with code "${code}".` }); return; }
+      if (targetRoom.phase === 'playing') { sendTo(ws, { type: 'error', message: 'That game has already started.' }); return; }
+      if (targetRoom.players.size >= targetRoom.maxPlayers) { sendTo(ws, { type: 'error', message: 'That room is full.' }); return; }
       myId = generateId();
-      room.players.set(myId, { kind: 'human', ws, id: myId, name: String(msg.name).trim() || 'Player', isHost: false });
-      sendTo(ws, { type: 'joined', playerId: myId, isHost: false });
-      broadcastLobbyState();
+      myCode = code;
+      targetRoom.players.set(myId, { kind: 'human', ws, id: myId, name: String(msg.name).trim() || 'Player', isHost: false });
+      sendTo(ws, { type: 'joined', playerId: myId, isHost: false, roomCode: code });
+      broadcastLobbyState(targetRoom);
     }
 
-    // ── Add bot ─────────────────────────────────────────────────────────────
-    else if (msg.type === 'add_bot') {
+    // ── All other messages require being in a room ───────────────────────────
+    else {
+      const room = myCode ? rooms.get(myCode) : null;
       if (!room || !myId) return;
-      const me = room.players.get(myId);
-      if (!me || isBot(me) || !me.isHost) { sendTo(ws, { type: 'error', message: 'Only the host can add bots.' }); return; }
-      if (room.players.size >= room.maxPlayers) { sendTo(ws, { type: 'error', message: 'Room is full.' }); return; }
-      const botNum = Array.from(room.players.values()).filter(isBot).length + 1;
-      const botId = generateId();
-      room.players.set(botId, { kind: 'bot', id: botId, name: `Bot ${botNum}` });
-      broadcastLobbyState();
-    }
 
-    // ── Remove bot ──────────────────────────────────────────────────────────
-    else if (msg.type === 'remove_bot') {
-      if (!room || !myId) return;
-      const me = room.players.get(myId);
-      if (!me || isBot(me) || !me.isHost) { sendTo(ws, { type: 'error', message: 'Only the host can remove bots.' }); return; }
-      const target = room.players.get(String(msg.botId));
-      if (target && isBot(target)) {
-        room.players.delete(target.id);
-        broadcastLobbyState();
+      // ── Add bot ───────────────────────────────────────────────────────────
+      if (msg.type === 'add_bot') {
+        const me = room.players.get(myId);
+        if (!me || isBot(me) || !me.isHost) { sendTo(ws, { type: 'error', message: 'Only the host can add bots.' }); return; }
+        if (room.players.size >= room.maxPlayers) { sendTo(ws, { type: 'error', message: 'Room is full.' }); return; }
+        const botNum = Array.from(room.players.values()).filter(isBot).length + 1;
+        const botId = generateId();
+        room.players.set(botId, { kind: 'bot', id: botId, name: `Bot ${botNum}` });
+        broadcastLobbyState(room);
       }
-    }
 
-    // ── Start game ───────────────────────────────────────────────────────────
-    else if (msg.type === 'start_game') {
-      if (!room || !myId) return;
-      const me = room.players.get(myId);
-      if (!me || isBot(me) || !me.isHost) { sendTo(ws, { type: 'error', message: 'Only the host can start.' }); return; }
-      if (room.players.size < 2) { sendTo(ws, { type: 'error', message: 'Need at least 2 players.' }); return; }
-      if (room.players.size < room.maxPlayers) { sendTo(ws, { type: 'error', message: 'Not all slots are filled yet.' }); return; }
-
-      const allPlayers = Array.from(room.players.values());
-      const playerNames = allPlayers.map(p => p.name);
-
-      let gs = startGame({ playerNames, seed: Date.now() });
-
-      // Remap engine-generated IDs to actual room player IDs
-      gs = {
-        ...gs,
-        players: gs.players.map((p, i) => ({ ...p, id: allPlayers[i].id })),
-      };
-
-      room.gameState = gs;
-      room.phase = 'playing';
-      room.scoreHistory = [];
-
-      broadcastHumans({ type: 'game_started' });
-      setTimeout(() => broadcastGameState(), 50);
-    }
-
-    // ── Predict ──────────────────────────────────────────────────────────────
-    else if (msg.type === 'predict') {
-      if (!room?.gameState || !myId) return;
-      const gs = room.gameState;
-      if (gs.players[gs.currentPlayer].id !== myId) {
-        sendTo(ws, { type: 'error', message: "It's not your turn to predict." }); return;
+      // ── Remove bot ────────────────────────────────────────────────────────
+      else if (msg.type === 'remove_bot') {
+        const me = room.players.get(myId);
+        if (!me || isBot(me) || !me.isHost) { sendTo(ws, { type: 'error', message: 'Only the host can remove bots.' }); return; }
+        const target = room.players.get(String(msg.botId));
+        if (target && isBot(target)) {
+          room.players.delete(target.id);
+          broadcastLobbyState(room);
+        }
       }
-      const { state, error } = makePrediction(gs, Number(msg.value));
-      if (error) { sendTo(ws, { type: 'error', message: error }); return; }
-      room.gameState = state;
-      if (state.phase === 'round_end') captureRoundScores(state);
-      broadcastGameState();
-    }
 
-    // ── Start next round (host only) ─────────────────────────────────────────
-    else if (msg.type === 'start_next_round') {
-      if (!room?.gameState || !myId) return;
-      const me = room.players.get(myId);
-      if (!me || isBot(me) || !me.isHost) { sendTo(ws, { type: 'error', message: 'Only the host can start the next round.' }); return; }
-      if (room.gameState.phase !== 'round_end') return;
-      room.gameState = advanceToNextRound(room.gameState);
-      broadcastGameState();
-    }
+      // ── Start game ────────────────────────────────────────────────────────
+      else if (msg.type === 'start_game') {
+        const me = room.players.get(myId);
+        if (!me || isBot(me) || !me.isHost) { sendTo(ws, { type: 'error', message: 'Only the host can start.' }); return; }
+        if (room.players.size < 2) { sendTo(ws, { type: 'error', message: 'Need at least 2 players.' }); return; }
+        if (room.players.size < room.maxPlayers) { sendTo(ws, { type: 'error', message: 'Not all slots are filled yet.' }); return; }
 
-    // ── Play card ─────────────────────────────────────────────────────────────
-    else if (msg.type === 'play_card') {
-      if (!room?.gameState || !myId) return;
-      if (room.trickPreviewActive) {
-        sendTo(ws, { type: 'error', message: 'Please wait for the trick to finish.' }); return;
+        const allPlayers = Array.from(room.players.values());
+        let gs = startGame({ playerNames: allPlayers.map(p => p.name), seed: Date.now() });
+        gs = { ...gs, players: gs.players.map((p, i) => ({ ...p, id: allPlayers[i].id })) };
+
+        room.gameState = gs;
+        room.phase = 'playing';
+        room.scoreHistory = [];
+
+        broadcastHumans(room, { type: 'game_started' });
+        setTimeout(() => broadcastGameState(room), 50);
       }
-      const gs = room.gameState;
-      if (gs.players[gs.currentPlayer].id !== myId) {
-        sendTo(ws, { type: 'error', message: "It's not your turn." }); return;
+
+      // ── Predict ───────────────────────────────────────────────────────────
+      else if (msg.type === 'predict') {
+        if (!room.gameState) return;
+        const gs = room.gameState;
+        if (gs.players[gs.currentPlayer].id !== myId) {
+          sendTo(ws, { type: 'error', message: "It's not your turn to predict." }); return;
+        }
+        const { state, error } = makePrediction(gs, Number(msg.value));
+        if (error) { sendTo(ws, { type: 'error', message: error }); return; }
+        room.gameState = state;
+        if (state.phase === 'round_end') captureRoundScores(room, state);
+        broadcastGameState(room);
       }
-      const err = processCardPlay(gs, String(msg.cardId));
-      if (err) sendTo(ws, { type: 'error', message: err });
+
+      // ── Start next round (host only) ──────────────────────────────────────
+      else if (msg.type === 'start_next_round') {
+        const me = room.players.get(myId);
+        if (!me || isBot(me) || !me.isHost) { sendTo(ws, { type: 'error', message: 'Only the host can start the next round.' }); return; }
+        if (!room.gameState || room.gameState.phase !== 'round_end') return;
+        room.gameState = advanceToNextRound(room.gameState);
+        broadcastGameState(room);
+      }
+
+      // ── Play card ─────────────────────────────────────────────────────────
+      else if (msg.type === 'play_card') {
+        if (!room.gameState) return;
+        if (room.trickPreviewActive) {
+          sendTo(ws, { type: 'error', message: 'Please wait for the trick to finish.' }); return;
+        }
+        const gs = room.gameState;
+        if (gs.players[gs.currentPlayer].id !== myId) {
+          sendTo(ws, { type: 'error', message: "It's not your turn." }); return;
+        }
+        const err = processCardPlay(room, gs, String(msg.cardId));
+        if (err) sendTo(ws, { type: 'error', message: err });
+      }
     }
   });
 
   // ── Disconnect ──────────────────────────────────────────────────────────────
   ws.on('close', () => {
-    if (!myId || !room) return;
+    if (!myId || !myCode) return;
+    const room = rooms.get(myCode);
+    if (!room) return;
+
     const leaving = room.players.get(myId);
     if (!leaving) return;
 
@@ -463,21 +444,19 @@ wss.on('connection', (ws) => {
 
     const humanCount = Array.from(room.players.values()).filter(isHuman).length;
     if (humanCount === 0) {
-      // No humans left — tear down room
       if (room.botTurnTimer) clearTimeout(room.botTurnTimer);
-      room = null;
+      rooms.delete(myCode);
       return;
     }
 
     if (room.phase === 'lobby') {
-      // Transfer host if host left
       if (isHuman(leaving) && leaving.isHost) {
         const newHost = Array.from(room.players.values()).find(isHuman) as HumanPlayer | undefined;
         if (newHost) newHost.isHost = true;
       }
-      broadcastLobbyState();
+      broadcastLobbyState(room);
     } else {
-      broadcastHumans({ type: 'player_disconnected', playerName: leaving.name });
+      broadcastHumans(room, { type: 'player_disconnected', playerName: leaving.name });
     }
   });
 });
@@ -487,9 +466,7 @@ wss.on('connection', (ws) => {
 // ---------------------------------------------------------------------------
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-  const localIP = getLocalIP();
   console.log('\n  Judgement Card Game Server');
   console.log(`  Local:   http://localhost:${PORT}`);
-  console.log(`  Network: http://${localIP}:${PORT}`);
-  console.log('\n  Share the Network URL with other players on the same WiFi.\n');
+  console.log('\n  Players join by room code — share the 4-character code after hosting.\n');
 });

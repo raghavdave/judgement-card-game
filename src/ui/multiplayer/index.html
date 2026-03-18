@@ -98,16 +98,26 @@
     ═══════════════════════════════════════════════════════════════ */
     #s-lobby { max-width: 540px; margin: 30px auto; }
 
-    .join-url-box {
-      background: rgba(255,255,255,0.08);
+    /* Room code display box (lobby) */
+    .room-code-box {
+      background: rgba(0,0,0,0.3);
       border: 1px dashed rgba(255,255,255,0.3);
       border-radius: 8px;
-      padding: 12px 16px;
-      display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      flex-wrap: wrap;
+      padding: 14px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      flex-wrap: wrap; margin-bottom: 14px;
     }
-    .join-url-box .url { font-family: monospace; font-size: 0.95rem; color: var(--yellow); }
+    .room-code-display {
+      font-family: monospace; font-size: 2rem; font-weight: bold;
+      color: var(--yellow); letter-spacing: 6px;
+    }
     .copy-btn { padding: 5px 12px; font-size: 0.78rem; background: var(--panel); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+
+    /* Room code input on home screen */
+    .code-input {
+      text-transform: uppercase; letter-spacing: 4px; font-size: 1.1rem;
+      font-family: monospace; text-align: center;
+    }
 
     .player-slots {
       display: flex; flex-direction: column; gap: 8px; margin: 14px 0;
@@ -304,9 +314,15 @@
   <!-- Join section -->
   <div class="panel" id="join-section">
     <h2>&#128101; Join a Game</h2>
-    <div class="gap">
+    <div class="gap2">
       <div class="label">Your name</div>
       <input id="join-name" type="text" placeholder="Enter your name" maxlength="20" />
+    </div>
+    <div class="gap">
+      <div class="label">Room code</div>
+      <input id="join-code" type="text" placeholder="A B C D" maxlength="4"
+        class="code-input"
+        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')" />
     </div>
     <button class="btn-blue" onclick="doJoin()" style="width:100%">Join Game</button>
   </div>
@@ -321,12 +337,12 @@
   <div class="panel">
     <h2>&#9201; Waiting Room</h2>
 
-    <div id="share-box" style="display:none; margin-bottom:14px;">
-      <div class="label" style="margin-bottom:6px">Share this link with other players on your network:</div>
-      <div class="join-url-box">
-        <span class="url" id="lobby-url"></span>
-        <button class="copy-btn btn-blue" onclick="copyUrl()">Copy</button>
+    <div class="room-code-box">
+      <div>
+        <div class="label" style="margin-bottom:4px">Room Code — share this with friends</div>
+        <div class="room-code-display" id="lobby-code">——</div>
       </div>
+      <button class="copy-btn btn-blue" onclick="copyCode()">Copy</button>
     </div>
 
     <div class="label" style="margin-bottom:6px">
@@ -426,9 +442,9 @@
 // ─── State ────────────────────────────────────────────────────────────────────
 let ws = null;
 let myPlayerId = null;
+let myRoomCode = null;
 let amHost = false;
-let gameState = null;     // latest game state from server
-let roundEndPrevScores = {};  // scores before round end (to compute round delta)
+let gameState = null;
 let countdownInterval = null;
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
@@ -460,10 +476,6 @@ function send(msg) {
 function handleMessage(msg) {
   switch (msg.type) {
 
-    case 'room_status':
-      handleRoomStatus(msg);
-      break;
-
     case 'error':
       showHomeError(msg.message);
       showGameMessage(msg.message, true);
@@ -471,6 +483,7 @@ function handleMessage(msg) {
 
     case 'joined':
       myPlayerId = msg.playerId;
+      myRoomCode = msg.roomCode;
       amHost = msg.isHost;
       showScreen('s-lobby');
       break;
@@ -496,34 +509,6 @@ function handleMessage(msg) {
   }
 }
 
-// ─── Room status (shown on home screen) ───────────────────────────────────────
-function handleRoomStatus(msg) {
-  const hostSec = document.getElementById('host-section');
-  const joinSec = document.getElementById('join-section');
-  const hint    = document.getElementById('home-error');
-
-  if (msg.status === 'no_room') {
-    hostSec.style.display = 'block';
-    joinSec.style.display = 'none';
-    hint.textContent = '';
-  } else if (msg.status === 'open') {
-    hostSec.style.display = 'none';
-    joinSec.style.display = 'block';
-    hint.textContent = `Game lobby open — ${msg.currentCount}/${msg.maxPlayers} players joined.`;
-    hint.style.color = 'rgba(255,255,255,0.6)';
-  } else if (msg.status === 'full') {
-    hostSec.style.display = 'none';
-    joinSec.style.display = 'none';
-    hint.textContent = 'The room is full. Please try again later.';
-    hint.style.color = '#ff9f9f';
-  } else if (msg.status === 'in_progress') {
-    hostSec.style.display = 'none';
-    joinSec.style.display = 'none';
-    hint.textContent = 'A game is already in progress on this server.';
-    hint.style.color = '#ff9f9f';
-  }
-}
-
 // ─── Actions: home ────────────────────────────────────────────────────────────
 function doHost() {
   const name = document.getElementById('host-name').value.trim();
@@ -534,8 +519,10 @@ function doHost() {
 
 function doJoin() {
   const name = document.getElementById('join-name').value.trim();
+  const code = document.getElementById('join-code').value.toUpperCase().trim();
   if (!name) { showHomeError('Please enter your name.'); return; }
-  send({ type: 'join', name });
+  if (code.length !== 4) { showHomeError('Please enter a 4-character room code.'); return; }
+  send({ type: 'join', name, code });
 }
 
 function showHomeError(msg) {
@@ -547,12 +534,7 @@ function showHomeError(msg) {
 function renderLobby(msg) {
   document.getElementById('lobby-count').textContent = msg.currentCount;
   document.getElementById('lobby-max').textContent   = msg.maxPlayers;
-
-  // Share URL (only show to host)
-  if (msg.isHost) {
-    document.getElementById('share-box').style.display = 'block';
-    document.getElementById('lobby-url').textContent   = msg.joinUrl;
-  }
+  document.getElementById('lobby-code').textContent  = msg.roomCode ?? myRoomCode ?? '——';
 
   // Player slots
   const container = document.getElementById('lobby-slots');
@@ -615,9 +597,9 @@ function doRemoveBot(botId) {
   send({ type: 'remove_bot', botId });
 }
 
-function copyUrl() {
-  const url = document.getElementById('lobby-url').textContent;
-  navigator.clipboard.writeText(url).catch(() => {});
+function copyCode() {
+  const code = document.getElementById('lobby-code').textContent;
+  navigator.clipboard.writeText(code).catch(() => {});
   const btn = document.querySelector('.copy-btn');
   btn.textContent = 'Copied!';
   setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
