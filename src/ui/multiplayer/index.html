@@ -4,74 +4,111 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Judgement — Multiplayer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --green:   #1a6b3a;
-      --green2:  #155730;
-      --panel:   rgba(0,0,0,0.30);
-      --panel2:  rgba(0,0,0,0.18);
-      --yellow:  #f9d84b;
-      --blue:    #3a7abf;
-      --red:     #c0392b;
-      --radius:  10px;
+      --bg-top:    #0a1628;
+      --bg-bot:    #0e3d8c;
+      --glass:     rgba(255,255,255,0.10);
+      --glass2:    rgba(255,255,255,0.06);
+      --border:    rgba(255,255,255,0.16);
+      --yellow:    #f9d84b;
+      --blue:      #3a8ef6;
+      --red:       #e74c3c;
+      --green-ok:  #27ae60;
+      --purple:    #8e44ad;
+      --radius:    16px;
+      --shadow:    0 8px 32px rgba(0,0,0,0.4);
     }
 
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: var(--green);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      background: linear-gradient(160deg, var(--bg-top) 0%, var(--bg-bot) 100%);
+      background-attachment: fixed;
       color: #fff;
       min-height: 100vh;
-      padding: 14px;
+      padding: 20px 16px;
     }
 
-    h1 { text-align: center; font-size: 1.6rem; letter-spacing: 3px; margin-bottom: 6px; }
-    h2 { font-size: 1.15rem; margin-bottom: 10px; }
-    h3 { font-size: 0.95rem; margin-bottom: 6px; }
+    h1 {
+      text-align: center;
+      font-size: 2.6rem;
+      font-weight: 800;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      color: var(--yellow);
+      text-shadow: 0 2px 24px rgba(249,216,75,0.45);
+      margin-bottom: 4px;
+    }
+    h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; }
+    h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
 
     input, textarea, select {
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 2px solid transparent;
-      font-size: 0.95rem;
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: 1.5px solid rgba(255,255,255,0.18);
+      font-size: 1rem;
+      font-family: inherit;
+      font-weight: 500;
       outline: none;
       width: 100%;
-      background: rgba(255,255,255,0.92);
-      color: #222;
-      transition: border-color 0.15s;
+      background: rgba(255,255,255,0.95);
+      color: #1a1a2e;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    input:focus { border-color: var(--yellow); }
+    input:focus { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(249,216,75,0.22); }
 
     button {
-      padding: 9px 20px;
+      padding: 11px 24px;
       border: none;
-      border-radius: 7px;
-      font-size: 0.9rem;
-      font-weight: bold;
+      border-radius: 10px;
+      font-size: 0.97rem;
+      font-family: inherit;
+      font-weight: 700;
       cursor: pointer;
-      transition: opacity 0.15s, transform 0.1s;
+      transition: opacity 0.15s, transform 0.12s, box-shadow 0.15s;
+      letter-spacing: 0.2px;
     }
-    button:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-    .btn-primary  { background: var(--yellow); color: #222; }
-    .btn-blue     { background: var(--blue); color: #fff; }
-    .btn-red      { background: var(--red); color: #fff; }
+    button:hover:not(:disabled) { opacity: 0.9; transform: translateY(-2px); box-shadow: 0 5px 18px rgba(0,0,0,0.35); }
+    button:active:not(:disabled) { transform: translateY(0); }
+    button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+    .btn-primary { background: var(--yellow); color: #1a1a2e; }
+    .btn-blue    { background: var(--blue);   color: #fff; }
+    .btn-red     { background: var(--red);    color: #fff; }
 
-    .panel { background: var(--panel); border-radius: var(--radius); padding: 18px 20px; }
-    .gap  { margin-bottom: 10px; }
-    .gap2 { margin-bottom: 6px; }
-    .label { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-bottom: 3px; }
+    .panel {
+      background: var(--glass);
+      backdrop-filter: blur(18px) saturate(1.2);
+      -webkit-backdrop-filter: blur(18px) saturate(1.2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      box-shadow: var(--shadow);
+    }
+    .gap  { margin-bottom: 14px; }
+    .gap2 { margin-bottom: 8px; }
+    .label {
+      font-size: 0.75rem; font-weight: 700;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 5px; letter-spacing: 0.6px; text-transform: uppercase;
+    }
     .badge {
       display: inline-block;
-      background: rgba(255,255,255,0.12);
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-size: 0.75rem;
+      background: rgba(255,255,255,0.14);
+      border-radius: 20px;
+      padding: 3px 11px;
+      font-size: 0.78rem;
+      font-weight: 600;
     }
-    .badge.yellow { background: var(--yellow); color: #222; }
+    .badge.yellow { background: var(--yellow); color: #1a1a2e; }
     .badge.blue   { background: var(--blue); }
-    .badge.green  { background: #27ae60; }
+    .badge.green  { background: var(--green-ok); }
 
     /* ── SCREEN SWITCHER ──────────────────────────────────────────── */
     .screen { display: none; }
@@ -80,258 +117,265 @@
     /* ═══════════════════════════════════════════════════════════════
        HOME SCREEN
     ═══════════════════════════════════════════════════════════════ */
-    #s-home { max-width: 480px; margin: 40px auto; }
+    #s-home { max-width: 500px; margin: 30px auto; }
     .divider {
-      display: flex; align-items: center; gap: 10px;
-      margin: 20px 0; color: rgba(255,255,255,0.4); font-size: 0.85rem;
+      display: flex; align-items: center; gap: 12px;
+      margin: 22px 0; color: rgba(255,255,255,0.35); font-size: 0.82rem; font-weight: 600; letter-spacing: 1px;
     }
     .divider::before, .divider::after {
-      content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.15);
+      content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.12);
     }
     #home-error {
-      color: #ff8080; font-size: 0.85rem; min-height: 20px; text-align: center;
-      margin-top: 6px;
+      color: #ff8080; font-size: 0.88rem; min-height: 20px; text-align: center;
+      margin-top: 8px; font-weight: 600;
     }
 
     /* ═══════════════════════════════════════════════════════════════
        LOBBY SCREEN
     ═══════════════════════════════════════════════════════════════ */
-    #s-lobby { max-width: 540px; margin: 30px auto; }
+    #s-lobby { max-width: 560px; margin: 30px auto; }
 
     /* Room code display box (lobby) */
     .room-code-box {
-      background: rgba(0,0,0,0.3);
-      border: 1px dashed rgba(255,255,255,0.3);
-      border-radius: 8px;
-      padding: 14px 16px;
+      background: rgba(249,216,75,0.08);
+      border: 1.5px dashed rgba(249,216,75,0.4);
+      border-radius: 12px;
+      padding: 16px 20px;
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      flex-wrap: wrap; margin-bottom: 14px;
+      flex-wrap: wrap; margin-bottom: 18px;
     }
     .room-code-display {
-      font-family: monospace; font-size: 2rem; font-weight: bold;
-      color: var(--yellow); letter-spacing: 6px;
+      font-family: 'Courier New', monospace; font-size: 2.2rem; font-weight: 800;
+      color: var(--yellow); letter-spacing: 10px;
     }
-    .copy-btn { padding: 5px 12px; font-size: 0.78rem; background: var(--panel); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+    .copy-btn { padding: 7px 14px; font-size: 0.8rem; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; }
 
     /* Room code input on home screen */
     .code-input {
-      text-transform: uppercase; letter-spacing: 4px; font-size: 1.1rem;
-      font-family: monospace; text-align: center;
+      text-transform: uppercase; letter-spacing: 6px; font-size: 1.15rem;
+      font-family: 'Courier New', monospace; text-align: center; font-weight: 700;
     }
 
-    .player-slots {
-      display: flex; flex-direction: column; gap: 8px; margin: 14px 0;
-    }
+    .player-slots { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
     .player-slot {
-      display: flex; align-items: center; gap: 10px;
-      background: var(--panel2); border-radius: 7px; padding: 9px 14px;
-      border-left: 3px solid rgba(255,255,255,0.15);
-      transition: border-color 0.2s;
+      display: flex; align-items: center; gap: 12px;
+      background: var(--glass2); border-radius: 10px; padding: 11px 16px;
+      border-left: 3px solid rgba(255,255,255,0.12);
+      transition: border-color 0.2s, background 0.2s;
     }
-    .player-slot.filled       { border-left-color: #27ae60; }
-    .player-slot.filled-bot   { border-left-color: #8e44ad; }
-    .player-slot.empty        { opacity: 0.5; }
+    .player-slot.filled       { border-left-color: var(--green-ok); background: rgba(39,174,96,0.08); }
+    .player-slot.filled-bot   { border-left-color: var(--purple); background: rgba(142,68,173,0.08); }
+    .player-slot.empty        { opacity: 0.45; }
     .player-slot .slot-actions { margin-left: auto; display: flex; gap: 6px; }
-    .slot-btn { padding: 3px 10px; font-size: 0.74rem; border-radius: 5px; border: none; cursor: pointer; font-weight: bold; }
-    .slot-btn.add  { background: #8e44ad; color: #fff; }
-    .slot-btn.rem  { background: var(--red); color: #fff; opacity: 0.85; }
-    .player-slot .slot-name { font-size: 0.95rem; }
-    .slot-dot {
-      width: 9px; height: 9px; border-radius: 50%;
-      background: rgba(255,255,255,0.2);
-    }
-    .slot-dot.online { background: #2ecc71; }
+    .slot-btn { padding: 4px 12px; font-size: 0.76rem; border-radius: 6px; border: none; cursor: pointer; font-weight: 700; font-family: inherit; }
+    .slot-btn.add { background: var(--purple); color: #fff; }
+    .slot-btn.rem { background: var(--red); color: #fff; opacity: 0.85; }
+    .player-slot .slot-name { font-size: 0.97rem; font-weight: 600; }
+    .slot-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.2); flex-shrink: 0; }
+    .slot-dot.online { background: #2ecc71; box-shadow: 0 0 6px rgba(46,204,113,0.6); }
 
     #lobby-countdown {
-      text-align: center; font-size: 0.85rem; color: rgba(255,255,255,0.55);
+      text-align: center; font-size: 0.88rem; color: rgba(255,255,255,0.5);
       margin-top: 6px; min-height: 18px;
     }
 
     /* ═══════════════════════════════════════════════════════════════
        GAME SCREEN
     ═══════════════════════════════════════════════════════════════ */
-    #s-game { max-width: 1000px; margin: 0 auto; }
+    #s-game { max-width: 1020px; margin: 0 auto; }
 
     /* Status bar */
     #g-status {
       display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
-      background: var(--panel); border-radius: 8px; padding: 7px 12px;
-      margin-bottom: 10px; font-size: 0.8rem;
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 50px; padding: 8px 16px;
+      margin-bottom: 12px; font-size: 0.82rem;
     }
     #g-status .chip {
-      background: rgba(255,255,255,0.1); border-radius: 4px; padding: 3px 9px;
+      background: rgba(255,255,255,0.10); border-radius: 20px;
+      padding: 4px 12px; font-weight: 600;
     }
-    #g-status .chip.highlight { background: var(--yellow); color: #222; font-weight: bold; }
+    #g-status .chip.highlight { background: var(--yellow); color: #1a1a2e; font-weight: 700; }
 
     /* Message bar */
     #g-message {
-      text-align: center; min-height: 22px; font-size: 0.9rem;
-      color: var(--yellow); margin-bottom: 8px; font-weight: 500;
+      text-align: center; min-height: 24px; font-size: 0.97rem;
+      color: var(--yellow); margin-bottom: 10px; font-weight: 600;
     }
 
     /* Opponents row */
-    #g-opponents {
-      display: flex; flex-wrap: wrap; gap: 8px;
-      margin-bottom: 10px; justify-content: center;
-    }
+    #g-opponents { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; justify-content: center; }
     .opponent-card {
-      background: var(--panel); border-radius: 9px; padding: 10px 14px;
-      min-width: 130px; border: 2px solid transparent; transition: border-color 0.2s;
-      text-align: center;
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1.5px solid var(--border);
+      border-radius: 12px; padding: 12px 16px;
+      min-width: 136px; transition: border-color 0.2s, box-shadow 0.2s;
+      text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
     }
-    .opponent-card.active { border-color: var(--yellow); }
-    .opponent-card .opp-name { font-weight: bold; font-size: 0.9rem; margin-bottom: 6px; }
+    .opponent-card.active { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(249,216,75,0.2); }
+    .opponent-card .opp-name { font-weight: 700; font-size: 0.93rem; margin-bottom: 7px; }
     .opponent-card .opp-badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 8px; }
     .card-backs { display: flex; gap: 3px; justify-content: center; flex-wrap: wrap; }
     .card-back {
-      width: 24px; height: 34px; border-radius: 3px;
-      background: repeating-linear-gradient(
-        45deg, #1a3a8f, #1a3a8f 3px, #1e44a8 3px, #1e44a8 6px
-      );
-      border: 1px solid rgba(255,255,255,0.3);
+      width: 24px; height: 34px; border-radius: 4px;
+      background: linear-gradient(135deg, #1a3a8f 0%, #1e44a8 100%);
+      border: 1px solid rgba(255,255,255,0.25);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
     }
 
     /* Trick area */
     #g-trick-area {
-      background: var(--panel); border-radius: var(--radius);
-      padding: 14px; margin-bottom: 10px;
-      min-height: 130px;
-      display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; align-items: center;
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px;
+      margin-bottom: 12px; min-height: 140px;
+      display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; align-items: center;
+      box-shadow: var(--shadow);
     }
-    #g-trick-area .empty-label {
-      color: rgba(255,255,255,0.25); font-size: 0.85rem;
-    }
+    #g-trick-area .empty-label { color: rgba(255,255,255,0.2); font-size: 0.88rem; font-weight: 500; }
     .trick-slot { text-align: center; }
-    .trick-slot .t-name { font-size: 0.7rem; color: #ccc; margin-top: 4px; }
+    .trick-slot .t-name { font-size: 0.72rem; color: rgba(255,255,255,0.6); margin-top: 5px; font-weight: 600; }
 
     /* Prediction panel */
     #g-prediction {
-      background: var(--panel); border-radius: var(--radius);
-      padding: 14px 16px; margin-bottom: 10px; display: none;
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px; margin-bottom: 12px; display: none;
+      box-shadow: var(--shadow);
     }
-    #g-prediction .pred-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
-    #g-prediction input[type=number] { width: 70px; text-align: center; }
-    #pred-forbidden { font-size: 0.8rem; color: #ff9f9f; }
+    #g-prediction .pred-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+    #g-prediction input[type=number] { width: 80px; text-align: center; font-size: 1.1rem; font-weight: 700; }
+    #pred-forbidden { font-size: 0.84rem; color: #ff9f9f; font-weight: 600; }
 
     /* My hand */
     #g-hand-area {
-      background: var(--panel); border-radius: var(--radius);
-      padding: 14px; margin-bottom: 10px;
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px; margin-bottom: 12px;
+      box-shadow: var(--shadow);
     }
-    #g-hand-area h3 { margin-bottom: 10px; color: var(--yellow); }
-    #g-hand {
-      display: flex; flex-wrap: wrap; gap: 8px;
-    }
+    #g-hand { display: flex; flex-wrap: wrap; gap: 10px; }
     .hand-card { position: relative; }
     .hand-card img {
-      width: 72px; height: 104px; border-radius: 6px;
+      width: 76px; height: 110px; border-radius: 7px;
       background: #fff; object-fit: contain;
-      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
-      cursor: not-allowed; opacity: 0.55;
+      transition: transform 0.18s, box-shadow 0.18s, opacity 0.15s;
+      cursor: not-allowed; opacity: 0.45;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.3);
     }
-    .hand-card img.playable {
-      cursor: pointer; opacity: 1;
-    }
+    .hand-card img.playable { cursor: pointer; opacity: 1; }
     .hand-card img.playable:hover {
-      transform: translateY(-10px);
-      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+      transform: translateY(-14px);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.55);
     }
 
-    /* Round end overlay */
+    /* Round end */
     #g-round-end {
-      display: none; background: var(--panel); border-radius: var(--radius);
-      padding: 18px; margin-bottom: 10px; text-align: center;
+      display: none; background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 22px; margin-bottom: 12px; text-align: center; box-shadow: var(--shadow);
     }
-    #g-round-end table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.88rem; }
-    #g-round-end th { color: var(--yellow); padding: 4px 8px; }
-    #g-round-end td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-    #re-waiting { font-size: 0.82rem; color: rgba(255,255,255,0.5); margin-top: 8px; min-height: 18px; }
-    #re-chart { display: block; border-radius: 6px; margin-top: 16px; }
+    #g-round-end table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
+    #g-round-end th { color: var(--yellow); padding: 6px 10px; font-size: 0.78rem; letter-spacing: 0.5px; text-transform: uppercase; }
+    #g-round-end td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+    #re-waiting { font-size: 0.85rem; color: rgba(255,255,255,0.45); margin-top: 10px; min-height: 18px; }
+    #re-chart { display: block; border-radius: 8px; margin-top: 18px; }
 
-    /* Start next round button — fixed top-right, host only */
+    /* Start next round button — fixed top-right */
     #btn-next-round {
-      display: none; position: fixed; top: 14px; right: 14px; z-index: 200;
-      background: var(--yellow); color: #222; font-weight: bold;
-      padding: 9px 18px; border-radius: 8px; font-size: 0.9rem;
-      box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+      display: none; position: fixed; top: 16px; right: 16px; z-index: 200;
+      background: var(--yellow); color: #1a1a2e; font-weight: 800;
+      padding: 11px 20px; border-radius: 10px; font-size: 0.93rem;
+      box-shadow: 0 4px 18px rgba(249,216,75,0.4);
+      letter-spacing: 0.2px;
     }
 
     /* Game over */
     #g-game-over {
-      display: none; text-align: center; background: var(--panel);
-      border-radius: var(--radius); padding: 28px; margin-bottom: 10px;
+      display: none; text-align: center; background: var(--glass);
+      backdrop-filter: blur(12px); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 32px; margin-bottom: 12px; box-shadow: var(--shadow);
     }
-    #g-game-over h2 { font-size: 1.6rem; margin-bottom: 10px; }
-    #g-game-over table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
-    #g-game-over th { color: var(--yellow); padding: 5px 10px; }
-    #g-game-over td { padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    #g-game-over h2 { font-size: 1.8rem; margin-bottom: 12px; }
+    #g-game-over table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.93rem; }
+    #g-game-over th { color: var(--yellow); padding: 6px 12px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    #g-game-over td { padding: 7px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
 
     /* Card images in trick area */
     .trick-img {
-      width: 62px; height: 90px; border-radius: 5px;
+      width: 66px; height: 96px; border-radius: 6px;
       background: #fff; object-fit: contain; display: block;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
     }
 
     /* Disconnected overlay */
     #g-disconnected {
       display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,0.75); z-index: 999;
-      align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+      background: rgba(0,0,0,0.8); z-index: 999;
+      align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+      backdrop-filter: blur(6px);
     }
     #g-disconnected.show { display: flex; }
-    #g-disconnected p { font-size: 1.1rem; }
+    #g-disconnected p { font-size: 1.15rem; font-weight: 600; }
 
     /* ── Game params (host sliders) ────────────────────────────────── */
     .param-row {
       display: flex; align-items: center; justify-content: space-between;
-      font-size: 0.78rem; color: rgba(255,255,255,0.45); margin-top: 2px;
+      font-size: 0.78rem; color: rgba(255,255,255,0.4); margin-top: 3px;
     }
-    .param-val { color: var(--yellow); font-weight: bold; }
+    .param-val { color: var(--yellow); font-weight: 700; }
 
     /* ── Rules button & overlay ────────────────────────────────────── */
     #rules-btn {
-      position: fixed; top: 14px; left: 14px; z-index: 300;
-      background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.85);
-      border: 1px solid rgba(255,255,255,0.25); border-radius: 7px;
-      padding: 6px 13px; font-size: 0.82rem; cursor: pointer;
-      backdrop-filter: blur(4px);
+      position: fixed; top: 16px; left: 16px; z-index: 300;
+      background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.9);
+      border: 1px solid rgba(255,255,255,0.22); border-radius: 20px;
+      padding: 7px 15px; font-size: 0.82rem; font-weight: 700;
+      cursor: pointer; backdrop-filter: blur(8px);
+      font-family: inherit; letter-spacing: 0.3px;
+      transition: background 0.15s;
     }
-    #rules-btn:hover { background: rgba(0,0,0,0.65); }
+    #rules-btn:hover { background: rgba(255,255,255,0.18); }
 
     #rules-overlay {
       display: none; position: fixed; inset: 0; z-index: 400;
-      background: rgba(0,0,0,0.6); align-items: flex-start; justify-content: center;
-      padding: 60px 16px 20px; overflow-y: auto;
+      background: rgba(0,0,0,0.65); align-items: flex-start; justify-content: center;
+      padding: 60px 16px 28px; overflow-y: auto; backdrop-filter: blur(4px);
     }
     #rules-overlay.show { display: flex; }
     #rules-panel-box {
-      background: #1a3a1f; border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 12px; padding: 22px 24px; max-width: 500px; width: 100%;
-      position: relative;
+      background: rgba(10,22,40,0.92); border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 18px; padding: 26px 28px; max-width: 520px; width: 100%;
+      position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      backdrop-filter: blur(20px);
     }
-    #rules-panel-box h3 { color: var(--yellow); font-size: 1.05rem; margin-bottom: 14px; }
-    #rules-panel-box h4 { color: var(--yellow); font-size: 0.85rem; margin: 12px 0 4px; }
-    #rules-panel-box p, #rules-panel-box li { font-size: 0.84rem; line-height: 1.55; color: rgba(255,255,255,0.85); }
-    #rules-panel-box ul { padding-left: 18px; }
+    #rules-panel-box h3 { color: var(--yellow); font-size: 1.15rem; font-weight: 800; margin-bottom: 16px; letter-spacing: 0.5px; }
+    #rules-panel-box h4 { color: var(--yellow); font-size: 0.82rem; font-weight: 700; margin: 14px 0 5px; text-transform: uppercase; letter-spacing: 0.8px; }
+    #rules-panel-box p, #rules-panel-box li { font-size: 0.88rem; line-height: 1.6; color: rgba(255,255,255,0.82); font-weight: 500; }
+    #rules-panel-box ul { padding-left: 20px; }
     .rules-close {
-      position: absolute; top: 12px; right: 14px;
-      background: none; border: none; color: rgba(255,255,255,0.5);
-      font-size: 1.1rem; cursor: pointer; padding: 2px 6px;
+      position: absolute; top: 14px; right: 16px;
+      background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6);
+      font-size: 1rem; cursor: pointer; padding: 4px 9px; border-radius: 6px;
+      font-family: inherit; font-weight: 700; transition: background 0.15s;
     }
-    .rules-close:hover { color: #fff; }
+    .rules-close:hover { background: rgba(255,255,255,0.15); color: #fff; }
     .rule-section {
-      background: rgba(255,255,255,0.05); border-radius: 7px; padding: 10px 14px; margin-top: 8px;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px; padding: 12px 16px; margin-top: 10px;
     }
-    .trump-cycle { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .trump-cycle { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 6px; }
     .trump-pill {
-      background: rgba(255,255,255,0.1); border-radius: 4px;
-      padding: 2px 8px; font-size: 0.78rem;
+      background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 3px 10px; font-size: 0.78rem; font-weight: 600;
     }
   </style>
 </head>
 <body>
 
 <h1>&#9824; Judgement &#9830;</h1>
+<p style="text-align:center;font-size:0.82rem;font-weight:600;letter-spacing:3px;color:rgba(255,255,255,0.35);text-transform:uppercase;margin-bottom:24px">Trick-Taking Card Game</p>
 
 <!-- ═══════════════════════════════════════════════════════════
      HOME SCREEN
@@ -348,7 +392,7 @@
       <div class="label">Total player slots (humans + bots) <span id="player-count-display" style="color:var(--yellow)">4</span></div>
       <input id="player-count" type="range" min="2" max="10" value="4"
         oninput="document.getElementById('player-count-display').textContent=this.value;updateGameParams()"
-        style="width:100%;accent-color:var(--yellow);margin-top:4px;background:transparent;cursor:pointer" />
+        style="width:100%;accent-color:#1fab1c;margin-top:4px;background:transparent;cursor:pointer" />
       <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:rgba(255,255,255,0.4);margin-top:2px">
         <span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
       </div>
@@ -357,14 +401,14 @@
       <div class="label">Initial cards per player: <span class="param-val" id="init-cards-display">2</span></div>
       <input id="init-cards" type="range" min="2" max="13" value="2"
         oninput="updateInitCards()"
-        style="width:100%;accent-color:var(--yellow);margin-top:4px;background:transparent;cursor:pointer" />
+        style="width:100%;accent-color:#1fab1c;margin-top:4px;background:transparent;cursor:pointer" />
       <div class="param-row"><span id="init-cards-min">2</span><span id="init-cards-max">13</span></div>
     </div>
     <div class="gap">
       <div class="label">Number of rounds: <span class="param-val" id="num-rounds-display">3</span></div>
       <input id="num-rounds" type="range" min="1" max="3" value="3"
         oninput="document.getElementById('num-rounds-display').textContent=this.value"
-        style="width:100%;accent-color:var(--yellow);margin-top:4px;background:transparent;cursor:pointer" />
+        style="width:100%;accent-color:#1fab1c;margin-top:4px;background:transparent;cursor:pointer" />
       <div class="param-row"><span>1</span><span id="num-rounds-max">3</span></div>
     </div>
     <button class="btn-primary" onclick="doHost()" style="width:100%">Host Game</button>
