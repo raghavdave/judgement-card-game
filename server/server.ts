@@ -64,6 +64,12 @@ interface Room {
   scoreHistory: Array<{ [playerId: string]: number }>;
   /** Pending cleanup timer — set when lobby empties, cancelled on reconnect. */
   cleanupTimer: ReturnType<typeof setTimeout> | null;
+  /** Players who disconnected mid-game; bot covers their turns until they return or timer fires. */
+  disconnectedGamePlayers: Map<string, {
+    name: string;
+    isHost: boolean;
+    killTimer: ReturnType<typeof setTimeout>;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +168,8 @@ function buildClientState(room: Room, gs: GameState, forPlayerId: string) {
       isBot: room.players.get(p.id) ? isBot(room.players.get(p.id)!) : false,
       isHost: room.players.get(p.id) && isHuman(room.players.get(p.id)!)
         ? (room.players.get(p.id) as HumanPlayer).isHost
-        : false,
+        : (room.disconnectedGamePlayers.get(p.id)?.isHost ?? false),
+      online: !room.disconnectedGamePlayers.has(p.id),
     })),
     yourHand: gs.players.find(p => p.id === forPlayerId)?.hand ?? [],
     trickCards: gs.trickCards.map(tc => ({
@@ -272,7 +279,10 @@ function checkAndExecuteBotTurn(room: Room): void {
 
   const currentGamePlayer = gs.players[gs.currentPlayer];
   const roomPlayer = room.players.get(currentGamePlayer.id);
-  if (!roomPlayer || isHuman(roomPlayer)) return;
+  const isDisconnected = room.disconnectedGamePlayers.has(currentGamePlayer.id);
+  // Live human turn — do nothing; bot handles bots and disconnected humans
+  if (roomPlayer && isHuman(roomPlayer)) return;
+  if (!roomPlayer && !isDisconnected) return; // unknown player, skip
 
   const publicState = buildBotPublicState(gs);
 
@@ -337,6 +347,7 @@ wss.on('connection', (ws) => {
         trickPreviewActive: false,
         scoreHistory: [],
         cleanupTimer: null,
+        disconnectedGamePlayers: new Map(),
       };
       newRoom.players.set(myId, { kind: 'human', ws, id: myId, name: String(msg.name).trim() || 'Host', isHost: true });
       rooms.set(code, newRoom);
@@ -366,12 +377,25 @@ wss.on('connection', (ws) => {
       const code = String(msg.code ?? '').toUpperCase().trim();
       const prevId = String(msg.playerId ?? '');
       const targetRoom = rooms.get(code);
-      if (!targetRoom || targetRoom.phase === 'playing') {
-        sendTo(ws, { type: 'reconnect_failed' }); return;
+      if (!targetRoom) { sendTo(ws, { type: 'reconnect_failed' }); return; }
+
+      // ── In-game reconnect ─────────────────────────────────────────────────
+      if (targetRoom.phase === 'playing') {
+        const disconnected = targetRoom.disconnectedGamePlayers.get(prevId);
+        if (!disconnected) { sendTo(ws, { type: 'reconnect_failed' }); return; }
+        clearTimeout(disconnected.killTimer);
+        targetRoom.disconnectedGamePlayers.delete(prevId);
+        myId = prevId;
+        myCode = code;
+        targetRoom.players.set(myId, { kind: 'human', ws, id: myId, name: disconnected.name, isHost: disconnected.isHost });
+        sendTo(ws, { type: 'game_rejoined', playerId: myId, isHost: disconnected.isHost, roomCode: code });
+        if (targetRoom.gameState) sendTo(ws, { type: 'game_state', state: buildClientState(targetRoom, targetRoom.gameState, myId) });
+        broadcastGameState(targetRoom); // refresh online indicators
+        return;
       }
-      // Cancel pending cleanup timer
+
+      // ── Lobby reconnect ───────────────────────────────────────────────────
       if (targetRoom.cleanupTimer) { clearTimeout(targetRoom.cleanupTimer); targetRoom.cleanupTimer = null; }
-      // Determine host: trust client claim only when room has no existing host
       const hasHost = Array.from(targetRoom.players.values()).some(p => isHuman(p) && (p as HumanPlayer).isHost);
       const isHostClaim = msg.isHost === true && !hasHost;
       myId = prevId || generateId();
@@ -479,27 +503,47 @@ wss.on('connection', (ws) => {
     room.players.delete(myId);
 
     const humanCount = Array.from(room.players.values()).filter(isHuman).length;
-    if (humanCount === 0) {
-      if (room.botTurnTimer) clearTimeout(room.botTurnTimer);
-      if (room.phase === 'lobby') {
-        // Keep the room alive for 90 s so the host can switch back from another app
-        if (room.cleanupTimer) clearTimeout(room.cleanupTimer);
-        room.cleanupTimer = setTimeout(() => { rooms.delete(myCode!); }, 90_000);
-      } else {
-        rooms.delete(myCode);
-      }
-      return;
-    }
 
     if (room.phase === 'lobby') {
+      if (humanCount === 0) {
+        if (room.botTurnTimer) clearTimeout(room.botTurnTimer);
+        if (room.cleanupTimer) clearTimeout(room.cleanupTimer);
+        room.cleanupTimer = setTimeout(() => { rooms.delete(myCode!); }, 90_000);
+        return;
+      }
       if (isHuman(leaving) && leaving.isHost) {
         const newHost = Array.from(room.players.values()).find(isHuman) as HumanPlayer | undefined;
         if (newHost) newHost.isHost = true;
       }
       broadcastLobbyState(room);
-    } else {
-      broadcastHumans(room, { type: 'player_disconnected', playerName: leaving.name });
+      return;
     }
+
+    // ── Game in progress ────────────────────────────────────────────────────
+    if (!isHuman(leaving)) return; // bot disconnect — ignore
+
+    if (humanCount === 0 && room.disconnectedGamePlayers.size === 0) {
+      // Nobody left at all — clean up immediately
+      if (room.botTurnTimer) clearTimeout(room.botTurnTimer);
+      rooms.delete(myCode);
+      return;
+    }
+
+    // Give the player 60 s to return; bot covers their turns in the meantime
+    const capturedCode = myCode;
+    const capturedId   = myId;
+    const capturedName = leaving.name;
+    const killTimer = setTimeout(() => {
+      const r = rooms.get(capturedCode!);
+      if (!r) return;
+      r.disconnectedGamePlayers.delete(capturedId!);
+      broadcastHumans(r, { type: 'player_disconnected', playerName: capturedName });
+      if (r.botTurnTimer) clearTimeout(r.botTurnTimer);
+      rooms.delete(capturedCode!);
+    }, 60_000);
+    room.disconnectedGamePlayers.set(myId!, { name: leaving.name, isHost: leaving.isHost, killTimer });
+    broadcastGameState(room); // refresh online indicators for remaining players
+    scheduleCheckBotTurn(room); // in case it's now this disconnected player's turn
   });
 });
 

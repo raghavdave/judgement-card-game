@@ -637,18 +637,19 @@ function connect() {
   };
 
   ws.onclose = () => {
+    myPlayerId = null; // reset so reconnect attempt sends credentials fresh
+    // If in a game, show a soft "reconnecting" notice instead of a hard stop.
+    // The server keeps the game alive for 60 s; visibilitychange will reconnect automatically.
     if (document.getElementById('s-game').classList.contains('active')) {
       document.getElementById('g-disconnected').classList.add('show');
-      document.getElementById('dc-msg').textContent = 'Connection to the server was lost.';
+      document.getElementById('dc-msg').textContent = 'Connection lost — reconnecting…';
     }
-    // Reset so a new connect() attempt starts fresh
-    myPlayerId = null;
   };
 }
 
 // Re-establish the WebSocket when the user switches back to this tab/app
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && (!ws || ws.readyState === WebSocket.CLOSED)) {
+  if (document.visibilityState === 'visible' && (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING)) {
     connect();
   }
 });
@@ -680,16 +681,22 @@ function handleMessage(msg) {
       break;
 
     case 'game_started':
-      clearReconnectData(); // room code no longer needed once game is live
+      showScreen('s-game');
+      break;
+
+    case 'game_rejoined':
+      myPlayerId = msg.playerId;
+      myRoomCode = msg.roomCode;
+      amHost     = msg.isHost;
+      document.getElementById('g-disconnected').classList.remove('show');
       showScreen('s-game');
       break;
 
     case 'reconnect_failed':
-      // Room expired — clear stale data and show home screen
       clearReconnectData();
       myPlayerId = null; myRoomCode = null; amHost = false;
       showScreen('s-home');
-      showHomeError('Your room expired. Please host or join a new game.');
+      showHomeError('Your session expired. Please host or join a new game.');
       break;
 
     case 'game_state':
@@ -698,9 +705,11 @@ function handleMessage(msg) {
       break;
 
     case 'player_disconnected':
+      // A player was disconnected for >60 s — game over
+      clearReconnectData();
       document.getElementById('g-disconnected').classList.add('show');
       document.getElementById('dc-msg').textContent =
-        `${msg.playerName} disconnected. The game cannot continue.`;
+        `${msg.playerName} was disconnected for too long. The game has ended.`;
       break;
   }
 }
@@ -873,13 +882,22 @@ function renderOpponents(gs) {
       `<div class="card-back"></div>`
     ).join('');
 
+    const isOffline = p.online === false;
+    if (isOffline) div.style.opacity = '0.6';
+    const onlineIndicator = isOffline
+      ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e74c3c;margin-right:5px;box-shadow:0 0 5px rgba(231,76,60,0.7)"></span>`
+      : `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2ecc71;margin-right:5px;box-shadow:0 0 5px rgba(46,204,113,0.6)"></span>`;
+    const statusBadge = isOffline
+      ? `<span class="badge" style="background:rgba(231,76,60,0.55);font-size:0.72rem">Reconnecting…</span>`
+      : '';
     const nameLabel = (p.isBot ? '🤖 ' : '') + esc(p.name) + (p.isHost ? ' ★' : '');
     div.innerHTML = `
-      <div class="opp-name">${nameLabel}</div>
+      <div class="opp-name">${onlineIndicator}${nameLabel}</div>
       <div class="opp-badges">
         <span class="badge blue">${p.score} pts</span>
         ${p.predictedTricks !== null ? `<span class="badge green">Pred: ${p.predictedTricks}</span>` : ''}
         <span class="badge">Won: ${p.tricksWon}</span>
+        ${statusBadge}
       </div>
       <div class="card-backs">${backs}</div>
     `;
@@ -1184,6 +1202,7 @@ function drawScoreChart(scoreHistory, players) {
 }
 
 function renderGameOver(gs) {
+  clearReconnectData(); // game finished — no reconnect needed
   const panel = document.getElementById('g-game-over');
   panel.style.display = 'block';
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
