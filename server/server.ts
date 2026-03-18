@@ -22,8 +22,9 @@ const app = express();
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });
 
-app.use('/assets', express.static(path.join(__dirname, '../assets')));
-app.use(express.static(path.join(__dirname, '../src/ui/multiplayer')));
+// process.cwd() is always the project root whether running via ts-node or compiled node
+app.use('/assets', express.static(path.join(process.cwd(), 'assets')));
+app.use(express.static(path.join(process.cwd(), 'src/ui/multiplayer')));
 
 // ---------------------------------------------------------------------------
 // Types
