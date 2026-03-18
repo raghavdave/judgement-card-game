@@ -62,10 +62,14 @@ export interface StartGameOptions {
   playerNames: string[];
   /** Optional seed for deterministic shuffling. Defaults to Date.now(). */
   seed?: number;
+  /** Initial cards per player. Defaults to the table-based value for the player count. */
+  initialCards?: number;
+  /** Total rounds to play. Defaults to 2*initialCards-1 (full game). */
+  numRounds?: number;
 }
 
 export function startGame(options: StartGameOptions): GameState {
-  const { playerNames, seed = Date.now() } = options;
+  const { playerNames, seed = Date.now(), initialCards: initialCardsOpt, numRounds: numRoundsOpt } = options;
   const playerCount = playerNames.length;
 
   if (playerCount < 2 || playerCount > 10) {
@@ -76,8 +80,8 @@ export function startGame(options: StartGameOptions): GameState {
     createPlayer(`player_${i + 1}`, name)
   );
 
-  const startingCards = getStartingCardCount(playerCount);
-  const totalRounds = getTotalRounds(startingCards);
+  const startingCards = initialCardsOpt ?? getStartingCardCount(playerCount);
+  const totalRounds = numRoundsOpt ?? getTotalRounds(startingCards);
 
   const state: GameState = {
     players,

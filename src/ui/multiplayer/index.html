@@ -280,6 +280,53 @@
     }
     #g-disconnected.show { display: flex; }
     #g-disconnected p { font-size: 1.1rem; }
+
+    /* ── Game params (host sliders) ────────────────────────────────── */
+    .param-row {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.78rem; color: rgba(255,255,255,0.45); margin-top: 2px;
+    }
+    .param-val { color: var(--yellow); font-weight: bold; }
+
+    /* ── Rules button & overlay ────────────────────────────────────── */
+    #rules-btn {
+      position: fixed; top: 14px; left: 14px; z-index: 300;
+      background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.85);
+      border: 1px solid rgba(255,255,255,0.25); border-radius: 7px;
+      padding: 6px 13px; font-size: 0.82rem; cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+    #rules-btn:hover { background: rgba(0,0,0,0.65); }
+
+    #rules-overlay {
+      display: none; position: fixed; inset: 0; z-index: 400;
+      background: rgba(0,0,0,0.6); align-items: flex-start; justify-content: center;
+      padding: 60px 16px 20px; overflow-y: auto;
+    }
+    #rules-overlay.show { display: flex; }
+    #rules-panel-box {
+      background: #1a3a1f; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px; padding: 22px 24px; max-width: 500px; width: 100%;
+      position: relative;
+    }
+    #rules-panel-box h3 { color: var(--yellow); font-size: 1.05rem; margin-bottom: 14px; }
+    #rules-panel-box h4 { color: var(--yellow); font-size: 0.85rem; margin: 12px 0 4px; }
+    #rules-panel-box p, #rules-panel-box li { font-size: 0.84rem; line-height: 1.55; color: rgba(255,255,255,0.85); }
+    #rules-panel-box ul { padding-left: 18px; }
+    .rules-close {
+      position: absolute; top: 12px; right: 14px;
+      background: none; border: none; color: rgba(255,255,255,0.5);
+      font-size: 1.1rem; cursor: pointer; padding: 2px 6px;
+    }
+    .rules-close:hover { color: #fff; }
+    .rule-section {
+      background: rgba(255,255,255,0.05); border-radius: 7px; padding: 10px 14px; margin-top: 8px;
+    }
+    .trump-cycle { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .trump-pill {
+      background: rgba(255,255,255,0.1); border-radius: 4px;
+      padding: 2px 8px; font-size: 0.78rem;
+    }
   </style>
 </head>
 <body>
@@ -300,11 +347,25 @@
     <div class="gap">
       <div class="label">Total player slots (humans + bots) <span id="player-count-display" style="color:var(--yellow)">4</span></div>
       <input id="player-count" type="range" min="2" max="10" value="4"
-        oninput="document.getElementById('player-count-display').textContent=this.value"
+        oninput="document.getElementById('player-count-display').textContent=this.value;updateGameParams()"
         style="width:100%;accent-color:var(--yellow);margin-top:4px;background:transparent;cursor:pointer" />
       <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:rgba(255,255,255,0.4);margin-top:2px">
         <span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
       </div>
+    </div>
+    <div class="gap">
+      <div class="label">Initial cards per player: <span class="param-val" id="init-cards-display">2</span></div>
+      <input id="init-cards" type="range" min="2" max="13" value="2"
+        oninput="updateInitCards()"
+        style="width:100%;accent-color:var(--yellow);margin-top:4px;background:transparent;cursor:pointer" />
+      <div class="param-row"><span id="init-cards-min">2</span><span id="init-cards-max">13</span></div>
+    </div>
+    <div class="gap">
+      <div class="label">Number of rounds: <span class="param-val" id="num-rounds-display">3</span></div>
+      <input id="num-rounds" type="range" min="1" max="3" value="3"
+        oninput="document.getElementById('num-rounds-display').textContent=this.value"
+        style="width:100%;accent-color:var(--yellow);margin-top:4px;background:transparent;cursor:pointer" />
+      <div class="param-row"><span>1</span><span id="num-rounds-max">3</span></div>
     </div>
     <button class="btn-primary" onclick="doHost()" style="width:100%">Host Game</button>
   </div>
@@ -343,6 +404,11 @@
         <div class="room-code-display" id="lobby-code">——</div>
       </div>
       <button class="copy-btn btn-blue" onclick="copyCode()">Copy</button>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <span class="badge blue">&#9654; <span id="lobby-rounds">?</span> rounds</span>
+      <span class="badge" style="background:rgba(255,255,255,0.12)">&#9824; Starting cards: <span id="lobby-init-cards">?</span></span>
     </div>
 
     <div class="label" style="margin-bottom:6px">
@@ -425,6 +491,62 @@
     </table>
     <div style="margin-top:18px">
       <button class="btn-primary" onclick="location.reload()">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rules button — always visible -->
+<button id="rules-btn" onclick="toggleRules()">&#9432; Rules</button>
+
+<!-- Rules overlay -->
+<div id="rules-overlay" onclick="if(event.target===this)toggleRules()">
+  <div id="rules-panel-box">
+    <button class="rules-close" onclick="toggleRules()">&#x2715;</button>
+    <h3>&#9824; How to Play — Judgement</h3>
+
+    <div class="rule-section">
+      <h4>&#128161; Prediction</h4>
+      <p>After cards are dealt, each player predicts how many tricks they will win (0 to cards dealt this round). Players predict in turn order. <strong>The last player cannot make the total predictions equal the number of tricks available.</strong></p>
+    </div>
+
+    <div class="rule-section">
+      <h4>&#127183; Trick Rules</h4>
+      <ul>
+        <li>The lead player plays any card.</li>
+        <li>Other players <strong>must follow the lead suit</strong> if they have it.</li>
+        <li>If you can't follow suit, you may <strong>cut</strong> (play trump) or <strong>fuse</strong> (play any other card).</li>
+        <li>In a <strong>No Trump</strong> round, cutting is not allowed.</li>
+      </ul>
+    </div>
+
+    <div class="rule-section">
+      <h4>&#127942; Trick Winner</h4>
+      <ul>
+        <li>If trump cards were played → <strong>highest trump wins</strong>.</li>
+        <li>If no trump → <strong>highest lead-suit card wins</strong>.</li>
+        <li>Card rank (high→low): A K Q J 10 9 8 7 6 5 4 3 2</li>
+      </ul>
+    </div>
+
+    <div class="rule-section">
+      <h4>&#128178; Scoring</h4>
+      <ul>
+        <li><strong>Exact prediction:</strong> +11 × predicted + 10</li>
+        <li><strong>Wrong prediction:</strong> −11 × predicted − 1</li>
+      </ul>
+      <p style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.5)">Highest cumulative score at the end of all rounds wins.</p>
+    </div>
+
+    <div class="rule-section">
+      <h4>&#9820; Trump Order</h4>
+      <div class="trump-cycle">
+        <span class="trump-pill">R1 ♠ Spades</span>
+        <span class="trump-pill">R2 ♦ Diamonds</span>
+        <span class="trump-pill">R3 ♣ Clubs</span>
+        <span class="trump-pill">R4 ♥ Hearts</span>
+        <span class="trump-pill">R5 No Trump</span>
+        <span class="trump-pill">R6 ♠ repeats…</span>
+      </div>
     </div>
   </div>
 </div>
@@ -514,8 +636,10 @@ function handleMessage(msg) {
 function doHost() {
   const name = document.getElementById('host-name').value.trim();
   const maxPlayers = parseInt(document.getElementById('player-count').value);
+  const initialCards = parseInt(document.getElementById('init-cards').value);
+  const numRounds = parseInt(document.getElementById('num-rounds').value);
   if (!name) { showHomeError('Please enter your name.'); return; }
-  send({ type: 'host', name, maxPlayers });
+  send({ type: 'host', name, maxPlayers, initialCards, numRounds });
 }
 
 function doJoin() {
@@ -533,9 +657,11 @@ function showHomeError(msg) {
 
 // ─── Lobby rendering ──────────────────────────────────────────────────────────
 function renderLobby(msg) {
-  document.getElementById('lobby-count').textContent = msg.currentCount;
-  document.getElementById('lobby-max').textContent   = msg.maxPlayers;
-  document.getElementById('lobby-code').textContent  = msg.roomCode ?? myRoomCode ?? '——';
+  document.getElementById('lobby-count').textContent     = msg.currentCount;
+  document.getElementById('lobby-max').textContent       = msg.maxPlayers;
+  document.getElementById('lobby-code').textContent      = msg.roomCode ?? myRoomCode ?? '——';
+  document.getElementById('lobby-rounds').textContent    = msg.numRounds ?? '?';
+  document.getElementById('lobby-init-cards').textContent = msg.initialCards ?? '?';
 
   // Player slots
   const container = document.getElementById('lobby-slots');
@@ -1054,7 +1180,35 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ─── Game parameter sliders ───────────────────────────────────────────────────
+function updateGameParams() {
+  const numPlayers = parseInt(document.getElementById('player-count').value);
+  const maxInitCards = Math.min(13, Math.floor(52 / numPlayers));
+  const initCardsInput = document.getElementById('init-cards');
+  initCardsInput.max = maxInitCards;
+  if (parseInt(initCardsInput.value) > maxInitCards) initCardsInput.value = maxInitCards;
+  document.getElementById('init-cards-max').textContent = maxInitCards;
+  updateInitCards();
+}
+
+function updateInitCards() {
+  const initCards = parseInt(document.getElementById('init-cards').value);
+  document.getElementById('init-cards-display').textContent = initCards;
+  const maxRounds = 2 * initCards - 1;
+  const numRoundsInput = document.getElementById('num-rounds');
+  numRoundsInput.max = maxRounds;
+  if (parseInt(numRoundsInput.value) > maxRounds) numRoundsInput.value = maxRounds;
+  document.getElementById('num-rounds-max').textContent = maxRounds;
+  document.getElementById('num-rounds-display').textContent = numRoundsInput.value;
+}
+
+// ─── Rules overlay ────────────────────────────────────────────────────────────
+function toggleRules() {
+  document.getElementById('rules-overlay').classList.toggle('show');
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
+updateGameParams();
 connect();
 </script>
 </body>

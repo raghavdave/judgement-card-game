@@ -52,6 +52,8 @@ function isHuman(p: RoomPlayer): p is HumanPlayer { return p.kind === 'human'; }
 interface Room {
   code: string;
   maxPlayers: number;
+  initialCards: number;
+  numRounds: number;
   players: Map<string, RoomPlayer>;
   gameState: GameState | null;
   phase: 'lobby' | 'playing';
@@ -119,6 +121,8 @@ function broadcastLobbyState(room: Room): void {
         type: 'lobby_update',
         roomCode: room.code,
         maxPlayers: room.maxPlayers,
+        initialCards: room.initialCards,
+        numRounds: room.numRounds,
         currentCount: room.players.size,
         players,
         canStart,
@@ -312,12 +316,18 @@ wss.on('connection', (ws) => {
     if (msg.type === 'host') {
       if (myCode) { sendTo(ws, { type: 'error', message: 'Already in a room.' }); return; }
       const maxPlayers = Math.min(10, Math.max(2, Number(msg.maxPlayers) || 4));
+      const maxInitialCards = Math.min(13, Math.floor(52 / maxPlayers));
+      const initialCards = Math.min(maxInitialCards, Math.max(2, Number(msg.initialCards) || 2));
+      const maxRounds = 2 * initialCards - 1;
+      const numRounds = Math.min(maxRounds, Math.max(1, Number(msg.numRounds) || maxRounds));
       const code = generateRoomCode();
       myId = generateId();
       myCode = code;
       const newRoom: Room = {
         code,
         maxPlayers,
+        initialCards,
+        numRounds,
         players: new Map(),
         gameState: null,
         phase: 'lobby',
@@ -382,7 +392,7 @@ wss.on('connection', (ws) => {
         if (room.players.size < room.maxPlayers) { sendTo(ws, { type: 'error', message: 'Not all slots are filled yet.' }); return; }
 
         const allPlayers = Array.from(room.players.values());
-        let gs = startGame({ playerNames: allPlayers.map(p => p.name), seed: Date.now() });
+        let gs = startGame({ playerNames: allPlayers.map(p => p.name), seed: Date.now(), initialCards: room.initialCards, numRounds: room.numRounds });
         gs = { ...gs, players: gs.players.map((p, i) => ({ ...p, id: allPlayers[i].id })) };
 
         room.gameState = gs;
