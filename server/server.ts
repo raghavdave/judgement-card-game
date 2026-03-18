@@ -79,6 +79,13 @@ interface Room {
 const rooms = new Map<string, Room>();
 
 // ---------------------------------------------------------------------------
+// Player Registry — persistent identity: machineId → player name
+// ---------------------------------------------------------------------------
+
+const playerRegistry = new Map<string, string>(); // machineId → registered name
+const takenNames     = new Set<string>();          // lowercase names in use
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -324,6 +331,31 @@ wss.on('connection', (ws) => {
     let msg: any;
     try { msg = JSON.parse(data.toString()); } catch { return; }
 
+    // ── Lookup — has this machine registered a name? ─────────────────────────
+    if (msg.type === 'lookup') {
+      const machineId = String(msg.machineId ?? '').trim();
+      sendTo(ws, { type: 'lookup_result', name: playerRegistry.get(machineId) ?? null });
+      return;
+    }
+
+    // ── Register — claim a unique player name for this machine ───────────────
+    if (msg.type === 'register') {
+      const machineId = String(msg.machineId ?? '').trim();
+      const newName   = String(msg.name ?? '').trim().slice(0, 20);
+      if (!machineId || !newName) { sendTo(ws, { type: 'register_error', message: 'Invalid data.' }); return; }
+      const existingName = playerRegistry.get(machineId);
+      if (existingName === newName) { sendTo(ws, { type: 'registered', name: newName }); return; }
+      if (takenNames.has(newName.toLowerCase())) {
+        sendTo(ws, { type: 'register_error', message: `"${newName}" is already taken. Please choose another name.` });
+        return;
+      }
+      if (existingName) takenNames.delete(existingName.toLowerCase());
+      playerRegistry.set(machineId, newName);
+      takenNames.add(newName.toLowerCase());
+      sendTo(ws, { type: 'registered', name: newName });
+      return;
+    }
+
     // ── Host ────────────────────────────────────────────────────────────────
     if (msg.type === 'host') {
       if (myCode) { sendTo(ws, { type: 'error', message: 'Already in a room.' }); return; }
@@ -362,7 +394,24 @@ wss.on('connection', (ws) => {
       if (code.length !== 4) { sendTo(ws, { type: 'error', message: 'Please enter a 4-character room code.' }); return; }
       const targetRoom = rooms.get(code);
       if (!targetRoom) { sendTo(ws, { type: 'error', message: `No room found with code "${code}".` }); return; }
-      if (targetRoom.phase === 'playing') { sendTo(ws, { type: 'error', message: 'That game has already started.' }); return; }
+      if (targetRoom.phase === 'playing') {
+        // Allow rejoining if this player (matched by name) disconnected mid-game
+        const joinName = String(msg.name ?? '').trim();
+        let matchId: string | null = null;
+        let matchData: { name: string; isHost: boolean; killTimer: ReturnType<typeof setTimeout> } | null = null;
+        for (const [pid, data] of targetRoom.disconnectedGamePlayers) {
+          if (data.name.toLowerCase() === joinName.toLowerCase()) { matchId = pid; matchData = data; break; }
+        }
+        if (!matchId || !matchData) { sendTo(ws, { type: 'error', message: 'That game has already started.' }); return; }
+        clearTimeout(matchData.killTimer);
+        targetRoom.disconnectedGamePlayers.delete(matchId);
+        myId = matchId; myCode = code;
+        targetRoom.players.set(myId, { kind: 'human', ws, id: myId, name: matchData.name, isHost: matchData.isHost });
+        sendTo(ws, { type: 'game_rejoined', playerId: myId, isHost: matchData.isHost, roomCode: code });
+        if (targetRoom.gameState) sendTo(ws, { type: 'game_state', state: buildClientState(targetRoom, targetRoom.gameState, myId) });
+        broadcastGameState(targetRoom);
+        return;
+      }
       if (targetRoom.players.size >= targetRoom.maxPlayers) { sendTo(ws, { type: 'error', message: 'That room is full.' }); return; }
       myId = generateId();
       myCode = code;
@@ -487,6 +536,15 @@ wss.on('connection', (ws) => {
         }
         const err = processCardPlay(room, gs, String(msg.cardId));
         if (err) sendTo(ws, { type: 'error', message: err });
+      }
+
+      // ── Chat ──────────────────────────────────────────────────────────────
+      else if (msg.type === 'chat') {
+        const me = room.players.get(myId);
+        if (!me) return;
+        const text = String(msg.text ?? '').trim().slice(0, 200);
+        if (!text) return;
+        broadcastHumans(room, { type: 'chat', playerId: myId, playerName: me.name, text });
       }
     }
   });
